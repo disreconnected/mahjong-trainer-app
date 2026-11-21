@@ -1,0 +1,4431 @@
+/* Mahjong Trainer styles. Design tokens first, then base tile styles. Later tasks add below. */
+
+:root {
+  /* Table and chrome */
+  --table: #14352b;
+  --table-edge: #0c231c;
+  --panel: #1b2230;
+  --panel-2: #252f40;
+  --text: #eef1f5;
+  --text-dim: #a9b3c1;
+  --accent: #f2b33d;
+
+  /* Tile body (same values are used inside tileart.js) */
+  --tile-face: #f7f1e1;
+  --tile-edge: #cdbf9c;
+  --tile-back: #2f6e62;
+
+  /* Suit inks (same values are used inside tileart.js) */
+  --ink-characters: #b3261e;
+  --ink-circles: #1f5fa8;
+  --ink-bamboo: #1d7a45;
+  --ink-dark: #1d2430;
+
+  /* Tile sizes (tile art is 60x80, i.e. 3:4) */
+  --tile-hand-w: 57px;
+  --tile-hand-h: 76px;
+  --tile-discard-w: 36px;
+  --tile-discard-h: 48px;
+  --tile-small-w: 26px;
+  --tile-small-h: 35px;
+
+  --font-ui: system-ui, 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', sans-serif;
+
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--font-ui);
+}
+
+/* Base tile */
+.tile {
+  display: inline-block;
+  flex: none;
+  width: var(--tile-w, var(--tile-hand-w));
+  height: var(--tile-h, var(--tile-hand-h));
+  line-height: 0;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+}
+
+.tile svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.tile--hand {
+  --tile-w: var(--tile-hand-w);
+  --tile-h: var(--tile-hand-h);
+}
+
+.tile--discard {
+  --tile-w: var(--tile-discard-w);
+  --tile-h: var(--tile-discard-h);
+}
+
+.tile--small {
+  --tile-w: var(--tile-small-w);
+  --tile-h: var(--tile-small-h);
+}
+
+/* ===== 6.2: 2D table ===== */
+
+/* Table-scoped tile sizes: scale with the viewport (the gallery keeps the fixed sizes above). */
+.mt-table {
+  --tile-hand-h: clamp(56px, min(9.6vh, 5.6vw), 96px);
+  --tile-hand-w: calc(var(--tile-hand-h) * 0.75);
+  --tile-discard-h: clamp(32px, min(5.2vh, 3.1vw), 56px);
+  --tile-discard-w: calc(var(--tile-discard-h) * 0.75);
+  --tile-small-h: clamp(26px, min(4.4vh, 2.6vw), 44px);
+  --tile-small-w: calc(var(--tile-small-h) * 0.75);
+  --gap: clamp(4px, 0.8vh, 10px);
+  --pool-gap: 3px;
+
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100vh;
+  overflow: hidden;
+}
+
+html,
+body {
+  overflow-x: hidden;
+}
+
+/* Top bar */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--panel-2);
+  font-size: 14px;
+  /* Above the end screen's backdrop (z-index 40) so its controls stay usable after a game;
+     below the settings and confirm overlays (z-index 50), which still cover it. */
+  position: relative;
+  z-index: 45;
+}
+
+/* Narrower windows: the top bar stays on one line (tighter spacing, slightly smaller text). */
+@media (max-width: 1279.98px) {
+  .topbar {
+    gap: clamp(6px, 1vw, 16px);
+    padding: 6px clamp(8px, 1vw, 16px);
+    font-size: clamp(12px, 1.12vw, 14px);
+    white-space: nowrap;
+  }
+
+  .topbar-buttons {
+    gap: clamp(3px, 0.4vw, 6px);
+  }
+
+  .topbar .tb-btn {
+    font-size: clamp(12px, 1.05vw, 13px);
+    padding: 3px clamp(5px, 0.6vw, 10px);
+  }
+
+  .topbar .tb-sep {
+    margin: 0 2px;
+  }
+}
+
+/* Below about 1200 px the bot level (also on the start screen and in Settings) is left out. */
+@media (max-width: 1199.98px) {
+  .topbar-bots {
+    display: none;
+  }
+}
+
+.brand {
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+
+.topbar-info {
+  color: var(--text-dim);
+}
+
+.topbar-auto {
+  color: var(--accent);
+}
+
+.topbar-buttons {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.tb-btn {
+  font: inherit;
+  font-size: 13px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--panel-2);
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.tb-btn:disabled {
+  opacity: 0.45;
+}
+
+/* Felt: seats around the edge, discard pools around the centre. */
+.felt {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto auto auto minmax(150px, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+  grid-template-areas:
+    "top   top   top    top    top"
+    "tick  pleft ptop   pright ."
+    "lseat pleft center pright rseat"
+    "lseat pleft pbot   pright rseat"
+    "abar  abar  abar   abar   abar"
+    "bot   bot   bot    bot    bot";
+  gap: var(--gap);
+  padding: var(--gap) 12px;
+  min-height: 0;
+  background: radial-gradient(ellipse at center, #1a4236 0%, var(--table) 60%, var(--table-edge) 100%);
+}
+
+.seat--top { grid-area: top; justify-self: center; }
+.seat--left { grid-area: lseat; align-self: center; }
+.seat--right { grid-area: rseat; align-self: center; }
+.seat--bottom { grid-area: bot; justify-self: center; }
+.pool--top { grid-area: ptop; }
+.pool--bottom { grid-area: pbot; }
+.pool--left { grid-area: pleft; align-self: center; }
+.pool--right { grid-area: pright; align-self: center; }
+.center { grid-area: center; }
+.ticker { grid-area: tick; }
+
+/* Seats */
+.seat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  min-width: 0;
+}
+
+.seat.is-turn {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 14px rgba(242, 179, 61, 0.35);
+}
+
+.seat-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.seat-name {
+  font-weight: 700;
+}
+
+.seat-wind,
+.seat-count {
+  color: var(--text-dim);
+}
+
+.dealer-badge,
+.turn-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.dealer-badge {
+  background: var(--ink-characters);
+  color: #fff;
+}
+
+.turn-badge {
+  background: var(--accent);
+  color: var(--ink-dark);
+}
+
+.seat-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px 10px;
+}
+
+.seat--left .seat-head,
+.seat--left .seat-body {
+  justify-content: flex-end;
+}
+
+/* Opponents' concealed tiles: overlapping small backs (the count is in the head). */
+.seat-hand {
+  display: flex;
+}
+
+.seat-hand > .tile--back + .tile--back {
+  margin-left: calc(var(--tile-small-w) * -0.4);
+}
+
+.seat-melds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.seat-flowers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.meld {
+  display: flex;
+  gap: 1px;
+}
+
+/* Your seat: name on the left, hand, then melds and flowers. */
+.seat--bottom {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+.seat--bottom .seat-head {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  justify-items: start;
+  gap: 4px 6px;
+}
+
+.seat--bottom .seat-body {
+  flex-wrap: nowrap;
+  gap: 14px;
+}
+
+.seat-hand--you {
+  align-items: flex-end;
+}
+
+.hand-tiles {
+  display: flex;
+  gap: 2px;
+}
+
+.hand-drawn {
+  margin-left: calc(var(--tile-hand-w) * 0.3);
+}
+
+/* Discard pools: rows of 6 with room for 4 rows. Side pools run in columns of 6. */
+.pool {
+  display: grid;
+  gap: var(--pool-gap);
+  padding: 4px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.16);
+  align-content: start;
+  justify-content: start;
+}
+
+.pool--top,
+.pool--bottom {
+  grid-template-columns: repeat(6, var(--tile-discard-w));
+  grid-auto-rows: var(--tile-discard-h);
+  min-height: calc(var(--tile-discard-h) * 4 + var(--pool-gap) * 3);
+  justify-self: center;
+}
+
+.pool--left,
+.pool--right {
+  grid-auto-flow: column;
+  grid-template-rows: repeat(6, var(--tile-discard-h));
+  grid-auto-columns: var(--tile-discard-w);
+  min-width: calc(var(--tile-discard-w) * 4 + var(--pool-gap) * 3);
+}
+
+/* The right player's first column sits nearest to them. */
+.pool--right {
+  direction: rtl;
+}
+
+.tile.is-last {
+  border-radius: 4px;
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  filter: drop-shadow(0 0 5px rgba(242, 179, 61, 0.8));
+}
+
+/* Centre: wall count with the four seat winds around it. */
+.center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 0;
+}
+
+.compass {
+  display: grid;
+  grid-template-columns: 30px auto 30px;
+  grid-template-rows: 26px auto 26px;
+  grid-template-areas:
+    ". t ."
+    "l c r"
+    ". b .";
+  align-items: center;
+  justify-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.compass-wind {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.compass-wind--top { grid-area: t; }
+.compass-wind--left { grid-area: l; }
+.compass-wind--right { grid-area: r; }
+.compass-wind--bottom { grid-area: b; }
+
+.compass-wind.is-active {
+  background: var(--accent);
+  color: var(--ink-dark);
+  box-shadow: 0 0 10px rgba(242, 179, 61, 0.7);
+}
+
+.wall-count {
+  grid-area: c;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 6px;
+  line-height: 1.1;
+}
+
+.wall-num {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.wall-label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.center-status {
+  font-size: 12px;
+  color: var(--accent);
+}
+
+/* Event ticker */
+.ticker {
+  align-self: start;
+  max-width: 300px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.ticker ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ticker li {
+  color: var(--text-dim);
+}
+
+.ticker li.is-newest {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Hover infobox for face-up tiles: one shared element, positioned by ui.js. */
+.tile-tip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 1000;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s ease-out;
+  padding: 4px 9px;
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  font: 600 13px/1.2 var(--font-ui);
+  white-space: nowrap;
+}
+
+.tile-tip.is-visible {
+  opacity: 1;
+}
+
+/* ===== 6.3: playing a turn ===== */
+
+.actionbar { grid-area: abar; }
+
+/* Your seat when you must decide (turn or claim). */
+.seat--bottom.is-asked {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent), 0 0 22px rgba(242, 179, 61, 0.5);
+  background: rgba(242, 179, 61, 0.08);
+}
+
+/* Hand tiles: lift on hover when you may discard; the selected tile stays lifted. */
+.hand-tile {
+  transition: transform 0.12s ease-out;
+}
+
+.hand-tile.is-selectable {
+  cursor: pointer;
+}
+
+.hand-tile.is-selectable:hover {
+  transform: translateY(-5px);
+}
+
+.hand-tile.is-selected,
+.hand-tile.is-selected:hover {
+  transform: translateY(-16px);
+  border-radius: 5px;
+  outline: 3px solid var(--accent);
+  outline-offset: 1px;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.6));
+}
+
+/* Action bar: prompt, claimed tile and timer on the left, buttons on the right. */
+.actionbar {
+  position: relative;
+  justify-self: center;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 18px;
+  min-height: calc(var(--tile-discard-h) + 12px);
+  padding: 4px 14px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.actionbar.is-asking {
+  border-color: rgba(242, 179, 61, 0.6);
+}
+
+.ab-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ab-prompt {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.actionbar.is-asking .ab-prompt {
+  color: var(--accent);
+}
+
+.ab-claim {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 10px 2px 4px;
+  border-radius: 8px;
+  background: rgba(242, 179, 61, 0.14);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tile.is-claim-tile {
+  border-radius: 4px;
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.ab-timer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+.ab-timer-track {
+  display: block;
+  width: 110px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.ab-timer-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left center;
+}
+
+.ab-timer.is-urgent .ab-timer-fill {
+  background: #e5533d;
+}
+
+.ab-timer.is-urgent .ab-timer-secs {
+  color: #ff8a75;
+}
+
+.ab-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.ab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 600 14px/1 var(--font-ui);
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--ink-dark);
+  cursor: pointer;
+}
+
+.ab-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.ab-btn--hu:not(:disabled) {
+  background: #e5533d;
+  border-color: #e5533d;
+  color: #fff;
+}
+
+.ab-btn--pass:not(:disabled) {
+  background: var(--panel-2);
+  border-color: var(--text-dim);
+  color: var(--text);
+}
+
+/* Disabled: clearly inactive, never mistaken for a live move. */
+.ab-btn:disabled {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: rgba(238, 241, 245, 0.3);
+  cursor: not-allowed;
+}
+
+.ab-btn kbd {
+  font: 600 10px/1 var(--font-ui);
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.18);
+  opacity: 0.85;
+}
+
+.ab-btn:disabled kbd {
+  background: transparent;
+}
+
+/* Chi / Kong picker: floats above the bar. */
+.ab-picker {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 2px solid var(--accent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+}
+
+.ab-picker-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.ab-pick {
+  display: flex;
+  gap: 1px;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-2);
+  background: var(--panel-2);
+  cursor: pointer;
+}
+
+.ab-pick:hover,
+.ab-pick:focus-visible {
+  border-color: var(--accent);
+}
+
+.tile.is-claimed {
+  border-radius: 4px;
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  transform: translateY(-3px);
+}
+
+.ab-pick-cancel {
+  font: 600 13px/1 var(--font-ui);
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--panel-2);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.ab-error {
+  flex-basis: 100%;
+  text-align: center;
+  font-size: 12px;
+  color: #ff8a75;
+}
+
+/* ===== 6.4: claim help (settings.claimHelp) ===== */
+
+@keyframes help-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(242, 179, 61, 0.85), 0 0 6px rgba(242, 179, 61, 0.5); }
+  50% { box-shadow: 0 0 0 5px rgba(242, 179, 61, 0), 0 0 16px rgba(242, 179, 61, 0.9); }
+}
+
+@keyframes help-tile-pulse {
+  0%, 100% { filter: drop-shadow(0 0 3px rgba(242, 179, 61, 0.7)); }
+  50% { filter: drop-shadow(0 0 10px rgba(242, 179, 61, 1)); }
+}
+
+/* Buttons for moves you can make right now: pulsing accent ring on top of "enabled". */
+.ab-btn.is-help:not(:disabled) {
+  outline: 2px solid #fff3d6;
+  outline-offset: 1px;
+  animation: help-pulse 1.3s ease-in-out infinite;
+}
+
+.ab-btn--hu.is-help:not(:disabled) {
+  outline-color: var(--accent);
+}
+
+/* Text column: prompt with the one-line hint under it. */
+.ab-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ab-hint {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* Hand tiles a claim would use: light when nothing is hovered, strong for the hovered move. */
+.hand-tile.is-help-soft {
+  border-radius: 5px;
+  outline: 2px dashed rgba(242, 179, 61, 0.75);
+  outline-offset: 1px;
+}
+
+.hand-tile.is-help-hot {
+  border-radius: 5px;
+  outline: 3px solid var(--accent);
+  outline-offset: 1px;
+  filter: drop-shadow(0 0 8px rgba(242, 179, 61, 0.95));
+}
+
+.hand-tile.is-help-hot:not(.is-selected) {
+  transform: translateY(-8px);
+}
+
+.meld.is-help-hot,
+.meld.is-help-target {
+  border-radius: 5px;
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.meld.is-help-target {
+  animation: help-tile-pulse 1.3s ease-in-out infinite;
+}
+
+/* The tile you can claim, where it lies on the table. */
+.tile.is-help-target {
+  border-radius: 4px;
+  outline: 3px solid var(--accent);
+  outline-offset: 1px;
+  animation: help-tile-pulse 1.3s ease-in-out infinite;
+}
+
+/* Bot 3 (on your left) is the only player you may Chi from. */
+.chi-from-label {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: var(--text-dim);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ab-btn.is-help:not(:disabled) {
+    animation: none;
+    box-shadow: 0 0 0 3px rgba(242, 179, 61, 0.6), 0 0 14px rgba(242, 179, 61, 0.8);
+  }
+
+  .tile.is-help-target,
+  .meld.is-help-target {
+    animation: none;
+    filter: drop-shadow(0 0 8px rgba(242, 179, 61, 1));
+  }
+}
+
+/* ===== 6.5: settings, start screen, overlays, top-bar toggles, own tile order ===== */
+
+/* Top bar: quick toggles (state at a glance), New game, Settings */
+.topbar-buttons {
+  align-items: center;
+}
+
+.tb-btn:not(:disabled) {
+  cursor: pointer;
+}
+
+.tb-btn:not(:disabled):hover {
+  border-color: var(--text-dim);
+}
+
+.tb-toggle .tb-key {
+  color: var(--text-dim);
+}
+
+.tb-toggle .tb-val {
+  font-weight: 700;
+}
+
+.tb-toggle.is-on {
+  border-color: rgba(242, 179, 61, 0.55);
+}
+
+.tb-toggle.is-on .tb-val {
+  color: var(--accent);
+}
+
+.tb-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--panel-2);
+}
+
+/* Shared panel */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 22px;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--panel-2);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  color: var(--text);
+}
+
+.set-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.set-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 18px;
+  padding: 8px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.set-row:first-child {
+  border-top: 0;
+}
+
+.set-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.set-title {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.set-help {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.set-note {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.set-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.set-preview {
+  display: flex;
+  gap: 2px;
+}
+
+/* Phone only (MAHJONG_APP_MODE=local): the export button in the settings list */
+.set-export {
+  font-size: 14px;
+  padding: 9px 14px;
+  white-space: normal;
+  text-align: center;
+}
+
+/* Segmented buttons */
+.seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  border-radius: 8px;
+  border: 1px solid var(--panel-2);
+  background: rgba(0, 0, 0, 0.25);
+  padding: 2px;
+  gap: 2px;
+}
+
+.seg-btn {
+  font: 600 13px/1 var(--font-ui);
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.seg-btn:hover:not(:disabled):not(.is-on) {
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+.seg-btn.is-on {
+  background: var(--accent);
+  color: var(--ink-dark);
+}
+
+.seg-btn:disabled {
+  cursor: not-allowed;
+  color: rgba(238, 241, 245, 0.3);
+}
+
+.seg-btn small {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.seg-btn:focus-visible,
+.tb-btn:focus-visible,
+.big-btn:focus-visible,
+.panel-x:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.panel-foot {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.big-btn {
+  font: 700 16px/1 var(--font-ui);
+  padding: 11px 26px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--ink-dark);
+  cursor: pointer;
+}
+
+.big-btn:hover {
+  filter: brightness(1.1);
+}
+
+.big-btn--quiet {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.big-btn--play {
+  font-size: 20px;
+  padding: 14px 64px;
+}
+
+/* Start screen */
+.mt-start {
+  height: 100vh;
+  overflow: hidden;
+  background: radial-gradient(ellipse at center, #1a4236 0%, var(--table) 60%, var(--table-edge) 100%);
+}
+
+.start {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+.panel--start {
+  width: min(720px, 100%);
+  max-height: calc(100vh - 24px);
+  box-sizing: border-box;
+}
+
+.start-title {
+  margin: 0;
+  font-size: 30px;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+  text-align: center;
+}
+
+.start-desc {
+  margin: 0;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+/* In-game overlay (settings, confirm) */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(5, 12, 10, 0.62);
+}
+
+.panel--overlay {
+  width: min(720px, 100%);
+  max-height: calc(100vh - 24px);
+  box-sizing: border-box;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-size: 20px;
+  color: var(--accent);
+}
+
+.panel-sub {
+  margin: -6px 0 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.panel-x {
+  font: 400 24px/1 var(--font-ui);
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-2);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.panel-x:hover {
+  background: var(--panel-2);
+}
+
+.panel--confirm {
+  align-items: center;
+  max-width: 440px;
+}
+
+.confirm-text {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* Own tile order (auto-sort off): drag to rearrange (pointer events, touch too) */
+.hand-tile.is-draggable {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.hand-tile.is-dragging,
+.hand-tile.is-dragging:hover {
+  position: relative;
+  z-index: 5;
+  cursor: grabbing;
+  transition: none;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.65));
+}
+
+.hand-tile.is-dragging.is-drag-outside {
+  opacity: 0.55;
+}
+
+/* Sort button (auto-sort off): quiet, apart from the move buttons */
+.ab-btn--sort {
+  background: var(--panel-2);
+  border-color: var(--text-dim);
+  color: var(--text);
+}
+
+/* ===== 6.6: end screen ===== */
+
+.end-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40; /* under the settings overlay */
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(5, 12, 10, 0.55);
+}
+
+.panel--end {
+  width: min(1100px, 100%);
+  max-height: calc(100vh - 24px);
+  box-sizing: border-box;
+  gap: 8px;
+  padding: 14px 20px;
+}
+
+.end-head {
+  text-align: center;
+}
+
+.end-title {
+  margin: 0;
+  font-size: 24px;
+}
+
+.end-title.is-you {
+  color: var(--accent);
+}
+
+.end-how {
+  margin: 2px 0 0;
+  font-size: 15px;
+  color: var(--text-dim);
+}
+
+/* Only as a last resort: the rows scroll inside the panel. */
+.end-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.end-row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: center;
+  gap: 2px 12px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.end-row.is-winner {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 14px rgba(242, 179, 61, 0.3);
+  background: rgba(242, 179, 61, 0.08);
+}
+
+.end-who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  font-size: 13px;
+}
+
+.end-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 4px 14px;
+}
+
+.end-melds,
+.end-hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.end-group {
+  display: flex;
+  gap: 1px;
+}
+
+.end-flowers {
+  display: flex;
+  gap: 2px;
+}
+
+.tile.is-win-tile {
+  border-radius: 4px;
+  outline: 3px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.end-status {
+  grid-column: 2;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.end-status.is-ready {
+  color: var(--text);
+}
+
+/* Your own line is the one to learn from. */
+.end-row.is-you .end-status {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.end-stats,
+.end-log {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.end-log.is-saved {
+  color: var(--text);
+}
+
+.end-log.is-error {
+  color: #ff8a75;
+  cursor: help;
+}
+
+.big-btn kbd {
+  font: 600 11px/1 var(--font-ui);
+  margin-left: 6px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.ab-show-result {
+  cursor: pointer;
+  border-color: var(--accent);
+}
+
+/* ===== 6.7: 3D table view ===== */
+
+/* 2D: the wrapper is invisible to layout; its children are the felt's grid items as before. */
+.table-plane {
+  display: contents;
+}
+
+/* Tilt angle of the table; registered so the switch to 3D can animate it (inherited, so the
+   upright labels and tile backs counter-rotate with the table at every frame). */
+@property --tilt {
+  syntax: '<angle>';
+  inherits: true;
+  initial-value: 0deg;
+}
+
+.mt-table.view-3d {
+  --tilt: 40deg;
+}
+
+/* The felt becomes the room: the tilted table above, your action bar and hand flat below,
+   in the same rows (and so at the same place) as in 2D. */
+.view-3d .felt {
+  position: relative;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "plane"
+    "abar"
+    "bot";
+  perspective: 1150px;
+  perspective-origin: 50% 0;
+  overflow: hidden;
+  background:
+    linear-gradient(to bottom, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.35) 100%),
+    radial-gradient(ellipse 80% 70% at 50% 35%, #233340 0%, #141c25 60%, #0c1117 100%);
+}
+
+/* Ticker: a flat card in the top-left corner, above the table. */
+.view-3d .ticker {
+  grid-area: auto;
+  position: absolute;
+  top: var(--gap);
+  left: 12px;
+  z-index: 3;
+  background: rgba(10, 16, 22, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* The table: the 2D layout of seats, pools and centre on one plane, tilted back about its
+   near edge. It is taller than its row so that, once tilted, it fills the row. */
+.view-3d .table-plane {
+  grid-area: plane;
+  align-self: end;
+  height: var(--plane-h, 128%);
+  min-height: 0;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto auto auto minmax(150px, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "top   top   top    top    top"
+    ".     pleft ptop   pright ."
+    "lseat pleft center pright rseat"
+    "lseat pleft pbot   pright rseat";
+  gap: var(--gap);
+  padding: var(--gap) 14px calc(var(--gap) + 4px);
+  border: 10px solid #5b3b24;
+  border-radius: 26px;
+  background: radial-gradient(ellipse at center, #1d4a3c 0%, var(--table) 62%, #10291f 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    inset 0 0 40px rgba(0, 0, 0, 0.45),
+    0 10px 0 #3a2415,
+    0 18px 30px rgba(0, 0, 0, 0.6);
+  transform-origin: 50% 100%;
+  transform: rotateX(var(--tilt));
+  transform-style: preserve-3d;
+}
+
+@keyframes table-tilt {
+  from { --tilt: 0deg; }
+}
+
+.view-3d.view-tilting .table-plane {
+  animation: table-tilt 400ms ease-out both;
+  animation-delay: var(--tilt-delay, 0ms);
+}
+
+/* Seats on the table: the label stands up facing you, like a name card. */
+.view-3d .table-plane .seat,
+.view-3d .table-plane .seat-body {
+  transform-style: preserve-3d;
+}
+
+/* Room for the upright tile backs, which rise in front of the label. */
+.view-3d .table-plane .seat {
+  gap: 12px;
+}
+
+.view-3d .table-plane .seat-head {
+  transform-origin: 50% 100%;
+  transform: rotateX(calc(-1 * var(--tilt)));
+}
+
+.view-3d .table-plane .seat-head {
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: rgba(10, 16, 22, 0.62);
+}
+
+/* --- Solid tiles (ui.js marks them tile--block) ---
+   A block is a cuboid built in the table's 3D space: the tile element is the face we see
+   (the SVG), the tile's ::before is its near side (lying) or top side (standing), and the
+   tile's ::after is the contact shadow on the felt. Standing blocks also get an empty
+   .tile-sides child whose ::before and ::after are the left and right sides; tiles lying on
+   the table go without (their butting neighbours hide those sides, and it keeps a full table
+   cheap to re-render). The face opposite the one we see is never visible from your seat, so
+   it is not drawn. Sides show an ivory body with the green back layer behind it.
+   Light comes from the top-left front: faces brightest, tops and left sides lit, near sides
+   mid, right sides darker. */
+
+/* Every box between the table and a tile keeps the 3D space (else blocks flatten). */
+.view-3d .table-plane .pool,
+.view-3d .table-plane .seat-melds,
+.view-3d .table-plane .meld,
+.view-3d .table-plane .seat-flowers,
+.view-3d .table-plane .seat-hand,
+.view-3d .seat--bottom .seat-hand--you,
+.view-3d .seat--bottom .hand-tiles,
+.view-3d .seat--bottom .hand-drawn,
+.view-3d .seat--bottom .seat-melds,
+.view-3d .seat--bottom .meld,
+.view-3d .seat--bottom .seat-flowers {
+  transform-style: preserve-3d;
+}
+
+.view-3d .tile--block {
+  --d: calc(var(--tile-w) * 0.44); /* thickness */
+  --near: #ebe2ca; /* layer next to the face we see: ivory body */
+  --far: #2a6559; /* layer behind it: green back */
+  --split: 62%;
+  position: relative;
+  transform-style: preserve-3d;
+  border-radius: 12% / 9%;
+  /* A filter (or opacity below 1) would flatten the block: glows below use box-shadow. */
+  filter: none !important;
+}
+
+/* Face down (the back is the face we see): the green layer comes first. */
+.view-3d .tile--block.tile--back {
+  --near: #2a6559;
+  --far: #ebe2ca;
+  --split: 38%;
+}
+
+.view-3d .tile--block > .tile-sides {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  pointer-events: none;
+}
+
+.view-3d .tile--block::before,
+.view-3d .tile--block::after,
+.view-3d .tile--block > .tile-sides::before,
+.view-3d .tile--block > .tile-sides::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  backface-visibility: hidden;
+}
+
+/* Left side (lit) and right side (in shade). */
+.view-3d .tile--block > .tile-sides::before {
+  top: 0;
+  bottom: 0;
+  right: 100%;
+  width: var(--d);
+  border-radius: 2px 0 0 2px;
+  transform-origin: 100% 50%;
+  transform: rotateY(-90deg);
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.05)),
+    linear-gradient(to left, var(--near) 0 var(--split), var(--far) 0);
+}
+
+.view-3d .tile--block > .tile-sides::after {
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: var(--d);
+  border-radius: 0 2px 2px 0;
+  transform-origin: 0 50%;
+  transform: rotateY(90deg);
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.28)),
+    linear-gradient(to right, var(--near) 0 var(--split), var(--far) 0);
+}
+
+/* Lying on the table (discards, melds, flowers): the face is the top of the block, raised by
+   its thickness; the near side hangs from the face's lower edge down to the felt. */
+.view-3d .table-plane .tile--block {
+  transform: translateZ(var(--d));
+}
+
+.view-3d .table-plane .tile--block::before {
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: var(--d);
+  border-radius: 0 0 2px 2px;
+  transform-origin: 50% 0;
+  transform: rotateX(-90deg);
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0.14)),
+    linear-gradient(to bottom, var(--near) 0 var(--split), var(--far) 0);
+}
+
+/* Soft contact shadow on the felt, a little behind and to the right (light top-left front). */
+.view-3d .table-plane .tile--block::after {
+  inset: 0;
+  border-radius: 12% / 9%;
+  transform: translate3d(1px, -1px, calc(0.5px - var(--d)));
+  background: rgba(0, 0, 0, 0.32);
+  box-shadow: 0 0 5px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Discards butt against each other with a hairline gap, like real ones. */
+.view-3d .table-plane {
+  --pool-gap: 1px;
+}
+
+.view-3d .table-plane .seat-flowers {
+  gap: 1px;
+}
+
+/* Standing blocks (opponents' concealed tiles, your seat): the top side shows. */
+.view-3d .table-plane .seat-hand > .tile--block,
+.view-3d .seat--bottom .tile--block {
+  transform: none;
+}
+
+.view-3d .table-plane .seat-hand > .tile--block::before,
+.view-3d .seat--bottom .tile--block::before {
+  left: 0;
+  right: 0;
+  top: auto;
+  bottom: 100%;
+  height: var(--d);
+  border-radius: 2px 2px 0 0;
+  transform-origin: 50% 100%;
+  transform: rotateX(90deg);
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.06)),
+    linear-gradient(to top, var(--near) 0 var(--split), var(--far) 0);
+}
+
+.view-3d .table-plane .seat-hand > .tile--block::after,
+.view-3d .seat--bottom .tile--block::after {
+  content: none;
+}
+
+/* Opponents' concealed tiles stand upright on their bottom edge, backs to the table's centre,
+   in a neat row (no overlap). The top player's row faces you. */
+.view-3d .table-plane .seat-hand > .tile--back + .tile--back {
+  margin-left: 1px;
+}
+
+.view-3d .table-plane .seat--top .seat-hand {
+  transform-origin: 50% 100%;
+  transform: rotateX(-90deg);
+}
+
+/* Side players' rows run along their edge of the table: a column of standing tiles, each
+   turned to face the centre. A tile stands on its bottom edge, one tile width (plus a
+   hairline) after the previous one. */
+.view-3d .table-plane .seat--left .seat-hand,
+.view-3d .table-plane .seat--right .seat-hand {
+  flex-direction: column;
+  align-self: flex-start;
+}
+
+.view-3d .table-plane .seat--left .seat-hand > .tile--back + .tile--back,
+.view-3d .table-plane .seat--right .seat-hand > .tile--back + .tile--back {
+  margin-left: 0;
+  margin-top: calc(var(--tile-w) + 1px - var(--tile-h));
+}
+
+.view-3d .table-plane .seat--left .seat-hand > .tile--block {
+  transform-origin: 50% 100%;
+  transform: rotateZ(-90deg) rotateX(-90deg);
+}
+
+.view-3d .table-plane .seat--right .seat-hand > .tile--block {
+  transform-origin: 50% 100%;
+  transform: rotateZ(90deg) rotateX(-90deg);
+}
+
+/* The right player's tiles sit at their own (right) edge, melds in front of them. */
+.view-3d .table-plane .seat--right .seat-hand {
+  order: 1;
+}
+
+/* Your seat: blocks standing up facing you, leaning back a little, seen from just above.
+   The lean uses the separate rotate property, so the lift and drag transforms of ui.js and
+   the 2D rules still apply unchanged on top of it. */
+.view-3d .seat--bottom .seat-body {
+  perspective: 700px;
+  perspective-origin: 50% -250%;
+}
+
+.view-3d .seat--bottom .tile--block {
+  transform-origin: 50% 100%;
+  rotate: x 10deg;
+  pointer-events: auto;
+}
+
+/* The leaning tiles' centres lie just behind their (empty) rows' plane, which would take the
+   clicks and hovers: the rows let the pointer through to the tiles. */
+.view-3d .seat--bottom .seat-hand--you,
+.view-3d .seat--bottom .hand-tiles,
+.view-3d .seat--bottom .hand-drawn,
+.view-3d .seat--bottom .seat-melds,
+.view-3d .seat--bottom .meld,
+.view-3d .seat--bottom .seat-flowers {
+  pointer-events: none;
+}
+
+/* Highlights as glows that keep the block solid (filters are off on blocks). */
+.view-3d .tile--block.is-last {
+  box-shadow: 0 0 6px 1px rgba(242, 179, 61, 0.85);
+}
+
+.view-3d .seat--bottom .tile--block.is-selected {
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25), 0 0 10px rgba(242, 179, 61, 0.55);
+}
+
+.view-3d .seat--bottom .tile--block.is-help-hot {
+  box-shadow: 0 0 10px 1px rgba(242, 179, 61, 0.95);
+}
+
+/* A dragged tile comes a little toward you so it passes in front of the others. */
+.view-3d .seat--bottom .tile--block.is-dragging {
+  translate: 0 0 10px;
+}
+
+.view-3d .seat--bottom .tile--block.is-drag-outside {
+  opacity: 1;
+}
+
+.view-3d .seat--bottom .tile--block.is-drag-outside > svg,
+.view-3d .seat--bottom .tile--block.is-drag-outside::before,
+.view-3d .seat--bottom .tile--block.is-drag-outside > .tile-sides::before,
+.view-3d .seat--bottom .tile--block.is-drag-outside > .tile-sides::after {
+  opacity: 0.55;
+}
+
+@keyframes help-block-pulse {
+  0%, 100% { box-shadow: 0 0 3px 1px rgba(242, 179, 61, 0.7); }
+  50% { box-shadow: 0 0 10px 3px rgba(242, 179, 61, 1); }
+}
+
+.view-3d .tile--block.is-help-target,
+.view-3d .table-plane .meld.is-help-target {
+  animation: help-block-pulse 1.3s ease-in-out infinite;
+  filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view-3d.view-tilting .table-plane {
+    animation: none;
+  }
+
+  .view-3d .tile--block.is-help-target,
+  .view-3d .table-plane .meld.is-help-target {
+    animation: none;
+    box-shadow: 0 0 8px 2px rgba(242, 179, 61, 1);
+  }
+}
+
+/* ===== R2: review screen ===== */
+
+.mt-review {
+  --tile-hand-h: clamp(50px, min(8.6vh, 5vw), 84px);
+  --tile-hand-w: calc(var(--tile-hand-h) * 0.75);
+  --tile-discard-h: clamp(28px, min(4.5vh, 2.7vw), 44px);
+  --tile-discard-w: calc(var(--tile-discard-h) * 0.75);
+  --tile-small-h: clamp(24px, min(3.9vh, 2.3vw), 36px);
+  --tile-small-w: calc(var(--tile-small-h) * 0.75);
+  --v-best: #3fb56b;
+  --v-fine: #9aa6b5;
+  --v-inaccuracy: #f0a530;
+  --v-mistake: #e5533d;
+  --hidden: #b58cf0;
+
+  height: 100vh;
+  overflow: hidden;
+}
+
+.rv-screen {
+  display: grid;
+  height: 100vh;
+  min-height: 0;
+}
+
+.rv-list {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.rv-game {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.rv-dim {
+  color: var(--text-dim);
+}
+
+/* Header bar */
+.rv-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 6px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--panel-2);
+  font-size: 14px;
+}
+
+.rv-title {
+  margin: 0;
+  font-size: 17px;
+  color: var(--accent);
+}
+
+.rv-bar-sub {
+  color: var(--text-dim);
+  min-width: 0;
+}
+
+.rv-tabs {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: auto;
+  padding: 2px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-2);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.rv-tab {
+  font: 600 13px/1 var(--font-ui);
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.rv-tab:hover:not(.is-on) {
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+.rv-tab.is-on {
+  background: var(--accent);
+  color: var(--ink-dark);
+}
+
+.rv-tab:focus-visible,
+.rv-row:focus-visible,
+.rv-link:focus-visible,
+.rv-opt:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.rv-reveal.is-on {
+  border-color: var(--hidden);
+}
+
+.rv-reveal.is-on .tb-val {
+  color: var(--hidden);
+}
+
+/* "hidden info": anything the learner could not know during play */
+.rv-hidden-tag {
+  display: inline-block;
+  font: 600 10px/1.3 var(--font-ui);
+  padding: 0 5px;
+  border-radius: 999px;
+  border: 1px dashed var(--hidden);
+  color: var(--hidden);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.rv-hidden-box {
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px dashed var(--hidden);
+  background: rgba(181, 140, 240, 0.07);
+}
+
+/* Game list */
+.rv-list-main {
+  overflow-y: auto;
+  padding: 14px;
+  background: radial-gradient(ellipse at center, #1a4236 0%, var(--table) 60%, var(--table-edge) 100%);
+}
+
+.rv-rows {
+  list-style: none;
+  margin: 0 auto;
+  padding: 0;
+  max-width: 1000px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rv-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 80px 170px 100px minmax(0, 1fr) 60px 230px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.32);
+  color: var(--text);
+  font: 14px/1.3 var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.rv-row:hover:not(.is-broken) {
+  border-color: var(--accent);
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.rv-row.is-broken {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.rv-row-title {
+  font-weight: 700;
+}
+
+.rv-row-when,
+.rv-row-level {
+  color: var(--text-dim);
+}
+
+.rv-badge-notes {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--ink-dark);
+}
+
+.rv-row-score {
+  text-align: right;
+  font-weight: 600;
+}
+
+.rv-row-score.is-pending {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.rv-row-score.is-error {
+  color: #ff8a75;
+  cursor: help;
+}
+
+.rv-empty {
+  max-width: 560px;
+  margin: 40px auto;
+  padding: 18px 22px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--panel-2);
+  text-align: center;
+  font-size: 15px;
+}
+
+.rv-empty.is-error {
+  border-color: #e5533d;
+}
+
+/* Game review: table + side panel */
+.rv-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(290px, 29vw, 430px);
+  min-height: 0;
+}
+
+.rv-main--doc {
+  display: block;
+  overflow-y: auto;
+  background: radial-gradient(ellipse at center, #1a4236 0%, var(--table) 60%, var(--table-edge) 100%);
+}
+
+.rv-table {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) auto minmax(110px, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "top   top   top"
+    "left  pools right"
+    "bot   bot   bot";
+  gap: 6px 10px;
+  padding: 6px 10px;
+  min-height: 0;
+  overflow: auto;
+  background: radial-gradient(ellipse at center, #1a4236 0%, var(--table) 60%, var(--table-edge) 100%);
+}
+
+.rv-seat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  min-width: 0;
+}
+
+.rv-seat.is-turn {
+  border-color: rgba(242, 179, 61, 0.7);
+}
+
+.rv-seat--top { grid-area: top; justify-self: center; }
+.rv-seat--left { grid-area: left; align-self: center; }
+.rv-seat--right { grid-area: right; align-self: center; }
+.rv-seat--bottom { grid-area: bot; justify-self: center; }
+
+.rv-seat-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.rv-seat-status {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.rv-seat-status.is-ready {
+  color: var(--hidden);
+}
+
+.rv-seat-flag {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--ink-dark);
+}
+
+.rv-seat-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 4px 10px;
+}
+
+.rv-opp-hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+}
+
+.rv-opp-hand > .tile--back + .tile--back {
+  margin-left: calc(var(--tile-small-w) * -0.4);
+}
+
+.rv-opp-hand.is-revealed {
+  padding: 2px;
+  border-radius: 6px;
+  outline: 1px dashed var(--hidden);
+  outline-offset: 1px;
+}
+
+.rv-seat--left .rv-opp-hand.is-revealed,
+.rv-seat--right .rv-opp-hand.is-revealed {
+  max-width: calc(var(--tile-small-w) * 7 + 10px);
+}
+
+.rv-melds,
+.rv-flowers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.rv-flowers {
+  gap: 1px;
+}
+
+/* Pools with the compass in the middle */
+.rv-pools {
+  grid-area: pools;
+  display: grid;
+  grid-template-columns: auto auto auto;
+  grid-template-rows: auto auto auto;
+  grid-template-areas:
+    "pleft ptop   pright"
+    "pleft center pright"
+    "pleft pbot   pright";
+  gap: 4px;
+  align-self: center;
+  min-height: 0;
+}
+
+.rv-pool {
+  display: grid;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.16);
+  align-content: start;
+  justify-content: start;
+}
+
+.rv-pool--top { grid-area: ptop; }
+.rv-pool--bottom { grid-area: pbot; }
+.rv-pool--left { grid-area: pleft; align-self: center; }
+.rv-pool--right { grid-area: pright; align-self: center; direction: rtl; }
+
+.rv-pool--top,
+.rv-pool--bottom {
+  grid-template-columns: repeat(8, var(--tile-discard-w));
+  grid-auto-rows: var(--tile-discard-h);
+  min-height: calc(var(--tile-discard-h) * 2 + 2px);
+}
+
+.rv-pool--left,
+.rv-pool--right {
+  grid-auto-flow: column;
+  grid-template-rows: repeat(6, var(--tile-discard-h));
+  grid-auto-columns: var(--tile-discard-w);
+  min-width: calc(var(--tile-discard-w) * 2 + 2px);
+}
+
+.rv-center {
+  grid-area: center;
+  display: grid;
+  place-items: center;
+  padding: 2px;
+}
+
+.rv-center .compass {
+  grid-template-columns: 24px auto 24px;
+  grid-template-rows: 22px auto 22px;
+}
+
+.rv-center .compass-wind {
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+}
+
+/* Your hand: large, the drawn tile set apart */
+.rv-seat--bottom .rv-seat-body {
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding-top: 16px; /* room for the marks' labels */
+}
+
+.rv-hand {
+  display: flex;
+  gap: 2px;
+}
+
+.rv-drawn {
+  margin-left: calc(var(--tile-hand-w) * 0.15);
+}
+
+/* Marks on tiles: an outline plus a word above the tile (never colour alone) */
+.tile.rv-mark {
+  position: relative;
+  border-radius: 5px;
+  outline: 3px solid var(--mark, var(--accent));
+  outline-offset: 1px;
+}
+
+.tile.rv-mark::after {
+  content: attr(data-mark);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 3px);
+  transform: translateX(-50%);
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--mark, var(--accent));
+  color: #10161d;
+  font: 700 10px/1.2 var(--font-ui);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.tile.rv-mark-threw { --mark: var(--v-mistake); }
+.tile.rv-mark-best { --mark: var(--v-best); }
+.tile.rv-mark-used { --mark: var(--accent); }
+.tile.rv-mark-claim { --mark: var(--accent); }
+
+.tile.rv-mark-could {
+  --mark: var(--accent);
+  outline-style: dashed;
+}
+
+/* Side panel */
+.rv-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 14px;
+  background: var(--panel);
+  border-left: 1px solid var(--panel-2);
+  font-size: 13px;
+}
+
+.rv-step-kicker {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.rv-step-title {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.rv-verdict {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rv-cost {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.rv-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font: 700 12px/1.4 var(--font-ui);
+  color: #10161d;
+  background: var(--v-color, var(--panel-2));
+  white-space: nowrap;
+}
+
+.rv-badge--big {
+  flex: none;
+  padding: 5px 14px;
+  font-size: 17px;
+  border-radius: 10px;
+}
+
+.v-best { --v-color: var(--v-best); }
+.v-fine { --v-color: var(--v-fine); }
+.v-inaccuracy { --v-color: var(--v-inaccuracy); }
+.v-mistake { --v-color: var(--v-mistake); }
+
+.rv-facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 10px;
+  margin: 0;
+}
+
+.rv-facts dt {
+  color: var(--text-dim);
+}
+
+.rv-facts dd {
+  margin: 0;
+}
+
+.rv-h {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.rv-tag {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 4px;
+  font: 700 10px/1.4 var(--font-ui);
+  color: #10161d;
+  background: var(--text-dim);
+}
+
+.rv-tag--best { background: var(--v-best); }
+.rv-tag--you { background: var(--accent); }
+.rv-tag--warn { background: var(--v-inaccuracy); }
+.rv-tag--safest { background: var(--v-fine); }
+
+/* Discard options: about 8 rows, then the table scrolls */
+.rv-options-wrap {
+  flex: none;
+  max-height: calc(8 * (var(--tile-small-h) + 5px) + 24px);
+  overflow-y: auto;
+  border-radius: 8px;
+  border: 1px solid var(--panel-2);
+}
+
+.rv-options {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.rv-options th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 4px 6px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--panel-2);
+}
+
+.rv-options td {
+  padding: 2px 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.rv-opt {
+  cursor: pointer;
+}
+
+.rv-opt:hover,
+.rv-opt.is-shown {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.rv-opt.is-mine td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.rv-opt-tile {
+  line-height: 0;
+}
+
+.rv-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.rv-opt-tags .rv-tag + .rv-tag {
+  margin-left: 3px;
+}
+
+.rv-accepts {
+  flex: none;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.rv-accepts-head {
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.rv-accepts-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.rv-accept {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rv-accept.is-dead {
+  opacity: 0.45;
+}
+
+.rv-offers,
+.rv-waits,
+.rv-danger {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rv-offer,
+.rv-waits li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid transparent;
+}
+
+.rv-offer.is-mine {
+  border-color: var(--accent);
+}
+
+.rv-offer-tiles {
+  display: flex;
+  gap: 1px;
+  min-width: calc(var(--tile-small-w) * 3 + 2px);
+}
+
+.tile.rv-claimed-tile {
+  border-radius: 3px;
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.rv-where {
+  color: var(--hidden);
+  font-size: 12px;
+}
+
+.rv-danger li {
+  line-height: 1.3;
+}
+
+.rv-danger-line {
+  margin: 4px 0 0;
+  font-weight: 700;
+}
+
+.rv-danger-line.is-safe { color: var(--v-best); }
+.rv-danger-line.is-hit { color: #ff8a75; }
+
+.rv-hidden-box p {
+  margin: 0;
+}
+
+/* Summary and coach notes */
+.rv-doc {
+  max-width: 780px;
+  margin: 14px auto;
+  padding: 16px 22px;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--panel-2);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.rv-headline {
+  margin: 0;
+  font-size: 22px;
+}
+
+.rv-subline {
+  margin: 2px 0 8px;
+  color: var(--text-dim);
+}
+
+.rv-score {
+  margin: 6px 0;
+}
+
+.rv-score-big {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.rv-counts {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.rv-counts th {
+  padding: 3px 10px 3px 0;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.rv-counts td {
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+.rv-costly {
+  margin: 4px 0;
+  padding-left: 20px;
+}
+
+.rv-costly li {
+  margin: 4px 0;
+}
+
+.rv-facts-list {
+  margin: 4px 0;
+  padding-left: 20px;
+}
+
+.rv-link {
+  font: inherit;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.rv-foot {
+  margin: 10px 0 0;
+}
+
+.rv-notes h2 {
+  margin: 0 0 8px;
+  font-size: 21px;
+  color: var(--accent);
+}
+
+.rv-notes h3 {
+  margin: 14px 0 4px;
+  font-size: 16px;
+}
+
+.rv-notes p {
+  margin: 6px 0;
+}
+
+.rv-notes ul,
+.rv-notes ol {
+  margin: 6px 0;
+  padding-left: 22px;
+}
+
+.rv-notes li {
+  margin: 3px 0;
+}
+
+.rv-error {
+  color: #ff8a75;
+}
+
+/* Bottom strip: navigation and the chart */
+.rv-strip {
+  display: grid;
+  grid-template-rows: auto 118px;
+  gap: 2px;
+  padding: 4px 12px 6px;
+  background: var(--panel);
+  border-top: 1px solid var(--panel-2);
+}
+
+.rv-nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 13px;
+}
+
+.rv-nav-pos {
+  min-width: 90px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.rv-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.rv-check.is-disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.rv-check input {
+  accent-color: var(--accent);
+}
+
+.rv-legend {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.rv-leg::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 0;
+  margin-right: 5px;
+  vertical-align: middle;
+  border-top: 2px solid #6b7685;
+}
+
+.rv-leg--you::before { border-top: 4px solid var(--accent); }
+.rv-leg--bot1::before { border-top-color: #7fa7c9; }
+.rv-leg--bot2::before { border-top-color: #c99a7f; border-top-style: dashed; }
+.rv-leg--bot3::before { border-top-color: #93c48b; border-top-style: dotted; }
+
+.rv-chart {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.rv-svg {
+  display: block;
+}
+
+.rv-grid {
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 1;
+}
+
+.rv-axis {
+  fill: var(--text-dim);
+  font: 11px var(--font-ui);
+}
+
+.rv-line {
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.rv-line--you {
+  stroke: var(--accent);
+  stroke-width: 3.5;
+}
+
+.rv-line--bot1 { stroke: #7fa7c9; stroke-width: 1.5; opacity: 0.75; }
+.rv-line--bot2 { stroke: #c99a7f; stroke-width: 1.5; opacity: 0.75; stroke-dasharray: 5 3; }
+.rv-line--bot3 { stroke: #93c48b; stroke-width: 1.5; opacity: 0.75; stroke-dasharray: 2 3; }
+
+.rv-sel {
+  stroke: var(--text);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.7;
+}
+
+.rv-dot {
+  fill: var(--v-color, #6b7685);
+  stroke: #10161d;
+  stroke-width: 1.5;
+}
+
+.rv-dot.is-selected {
+  stroke: var(--text);
+  stroke-width: 2.5;
+}
+
+.rv-dot.is-dim {
+  opacity: 0.3;
+}
+
+.rv-step-hit {
+  cursor: pointer;
+}
+
+.rv-hit {
+  fill: transparent;
+}
+
+.rv-step-hit:hover .rv-hit {
+  fill: rgba(255, 255, 255, 0.06);
+}
+
+/* Narrow windows: the list rows wrap */
+@media (max-width: 1180px) {
+  .rv-row {
+    grid-template-columns: 70px 150px 90px minmax(0, 1fr) 54px;
+  }
+
+  .rv-row-score {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+}
+
+@media (max-width: 760px) {
+  .rv-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 12px;
+  }
+}
+
+/* ---------- A1: centre announcements (Chi, Pong, Kong, Hu, draw) ---------- */
+
+/* One shared element on <body> (ui.js places it over the compass). Above the table, below the
+   end screen (40), top bar (45) and overlays (50); never takes clicks. Flat in both views. */
+.announce {
+  --ann-color: var(--accent);
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 15;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+}
+
+.announce--chi { --ann-color: #8cc8ff; }
+.announce--pong { --ann-color: #9be39b; }
+.announce--kong { --ann-color: #e2b0ff; }
+.announce--hu { --ann-color: var(--accent); }
+.announce--draw { --ann-color: var(--text-dim); }
+
+.announce.is-visible {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity 150ms ease-in;
+}
+
+.announce.is-in {
+  animation: announce-in 120ms ease-out backwards;
+}
+
+.announce.is-out {
+  opacity: 0;
+}
+
+@keyframes announce-in {
+  from { opacity: 0; transform: scale(0.88); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes announce-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.announce-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 150px;
+  padding: 10px 20px 12px;
+  border-radius: 14px;
+  background: rgba(18, 24, 34, 0.94);
+  border: 2px solid var(--ann-color);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6);
+  color: var(--text);
+  font-family: var(--font-ui);
+  white-space: nowrap;
+}
+
+.announce-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  line-height: 1;
+}
+
+.announce-title {
+  font-size: clamp(28px, 5.4vh, 42px);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--ann-color);
+}
+
+.announce-who {
+  font-size: clamp(16px, 2.8vh, 21px);
+  font-weight: 700;
+}
+
+.announce-tiles {
+  display: flex;
+  gap: 3px;
+  padding-top: 4px;
+}
+
+.announce .tile {
+  --tile-h: clamp(38px, 6.2vh, 58px);
+  --tile-w: calc(var(--tile-h) * 0.75);
+}
+
+.announce .tile.is-marked {
+  border-radius: 4px;
+  outline: 3px solid var(--ann-color);
+  outline-offset: 1px;
+  transform: translateY(-4px);
+}
+
+.announce-sub {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+/* Text for screen readers only (the aria-live region's plain sentence). */
+.announce-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The set that was just made, at that player's seat, while its announcement shows. */
+.meld.is-announced {
+  border-radius: 5px;
+  outline: 2px solid #fff3d6;
+  outline-offset: 2px;
+  box-shadow: 0 0 12px 3px rgba(242, 179, 61, 0.85);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .announce.is-in {
+    animation: announce-fade 120ms linear backwards;
+  }
+}
+
+/* ---------- R3: review safety ---------- */
+
+.rv-verdict {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.rv-subverdicts {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-dim);
+}
+
+.rv-subverdicts b {
+  color: var(--text);
+}
+
+.rv-cost {
+  flex: 1 1 160px;
+}
+
+.rv-step-note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--text-dim);
+}
+
+.rv-threat.is-threatened {
+  color: var(--v-inaccuracy);
+}
+
+/* Risk chip in the discard options table */
+.rv-risk {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 4px;
+  font: 700 10px/1.4 var(--font-ui);
+  white-space: nowrap;
+  border: 1px solid currentColor;
+}
+
+.rv-risk--safe { color: var(--v-best); }
+.rv-risk--low { color: var(--v-fine); }
+.rv-risk--medium { color: var(--v-inaccuracy); }
+.rv-risk--high { color: #10161d; background: var(--v-mistake); border-color: var(--v-mistake); }
+
+.rv-wait-shape,
+.rv-wait-wider {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.rv-wait-wider {
+  color: var(--v-inaccuracy);
+}
+
+.rv-hindsight {
+  margin: 6px 0 0;
+  line-height: 1.35;
+}
+
+.rv-hindsight-tag {
+  display: inline-block;
+  font: 600 10px/1.3 var(--font-ui);
+  padding: 0 5px;
+  border-radius: 999px;
+  border: 1px dotted var(--hidden);
+  color: var(--hidden);
+  vertical-align: middle;
+}
+
+/* "What do these mean?" box on the Steps tab */
+.rv-step-kicker {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.rv-glossary-btn {
+  font-size: 12px;
+}
+
+.rv-glossary {
+  flex: none;
+  position: relative;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-2);
+  background: rgba(0, 0, 0, 0.3);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.rv-glossary dl {
+  margin: 0;
+}
+
+.rv-glossary dt {
+  margin-top: 4px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.rv-glossary dt:first-child {
+  margin-top: 0;
+}
+
+.rv-glossary dd {
+  margin: 0;
+}
+
+.rv-glossary-close {
+  float: right;
+  margin: 0 0 4px 8px;
+}
+
+/* ===== R4b: learning loop ===== */
+
+.lf-dim {
+  color: var(--text-dim);
+}
+
+.lf-small {
+  font-size: 12px;
+}
+
+/* Start screen: the focus card beside the settings panel, and the Progress / Practice buttons. */
+.start--learn {
+  grid-template-columns: minmax(0, 680px) minmax(250px, 340px);
+  justify-content: center;
+  align-content: center;
+  gap: 16px;
+}
+
+.start--learn .panel--start {
+  width: 100%;
+}
+
+.start--learn .panel-foot {
+  flex-wrap: wrap;
+}
+
+.start--learn .big-btn--play {
+  padding: 14px 44px;
+}
+
+/* Narrow windows: the card goes under the panel and the start screen scrolls. */
+@media (max-width: 899.98px) {
+  .start--learn {
+    grid-template-columns: minmax(0, 680px);
+    grid-template-rows: auto auto;
+    align-content: start;
+    overflow-y: auto;
+  }
+
+  .start--learn .panel--start,
+  .start--learn .lf-card {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+.lf-slot {
+  display: contents;
+}
+
+.big-btn.is-off {
+  opacity: 0.45;
+  cursor: default;
+  filter: none;
+}
+
+.lf-card {
+  align-self: center;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  gap: 8px;
+  padding: 16px 18px;
+}
+
+.lf-card p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.lf-card-title {
+  margin: 0;
+  font-size: 16px;
+  color: var(--accent);
+}
+
+.lf-focus-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lf-focus-title {
+  margin: 0 0 3px;
+  font-size: 15px;
+}
+
+.lf-card .lf-focus-tip {
+  margin-bottom: 3px;
+  font-size: 14px;
+}
+
+/* The focus line: part of the top bar, but hung just below it over the felt's top-left corner,
+   so the bar and the table keep their layout. */
+.topbar-focus {
+  position: absolute;
+  top: 100%;
+  left: 12px;
+  margin-top: 6px;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  max-width: clamp(160px, calc(50vw - 300px), 420px);
+  box-sizing: border-box;
+  padding: 3px 2px 3px 10px;
+  border: 1px solid rgba(242, 179, 61, 0.45);
+  border-radius: 10px;
+  background: rgba(27, 34, 48, 0.85);
+  color: var(--accent);
+  font-size: 12.5px;
+  line-height: 1.3;
+  white-space: normal;
+  cursor: help;
+}
+
+.topbar-focus-text {
+  min-width: 0;
+}
+
+.topbar-focus-x {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 5px;
+  cursor: pointer;
+}
+
+.topbar-focus-x:hover {
+  color: var(--text);
+}
+
+/* End screen: "Your focus this game". */
+.lf-end:empty {
+  display: none;
+}
+
+.lf-end-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  font-size: 13px;
+}
+
+.lf-end-box p {
+  margin: 0;
+}
+
+.lf-end-head {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.lf-end-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.lf-end-practice {
+  margin-left: auto;
+  font-size: 14px;
+  padding: 8px 16px;
+}
+
+.lf-fixed {
+  margin: 4px 0;
+  color: #8fdcab;
+  font-weight: 600;
+}
+
+/* Links between Review, Progress and Practice. */
+.lf-screens {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-2);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.lf-bar .lf-screens,
+.rv-list .rv-bar .lf-screens {
+  margin-left: auto;
+}
+
+.lf-screen-btn {
+  font: 600 13px/1 var(--font-ui);
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.lf-screen-btn:hover:not(.is-on) {
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+.lf-screen-btn.is-on {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+/* Progress */
+.lf-progress-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(290px, 29vw, 420px);
+  min-height: 0;
+  background: radial-gradient(ellipse at center, #1a4236 0%, var(--table) 60%, var(--table-edge) 100%);
+}
+
+.lf-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 10px 14px;
+}
+
+.lf-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.lf-stat,
+.lf-charts-box,
+.lf-lessons {
+  background: var(--panel);
+  border: 1px solid var(--panel-2);
+  border-radius: 10px;
+}
+
+.lf-stat {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 10px;
+  min-width: 0;
+}
+
+.lf-stat-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.lf-stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.lf-stat-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.lf-skipped {
+  margin: 0;
+}
+
+.lf-charts-box {
+  padding: 8px 12px 4px;
+}
+
+.lf-charts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.lf-fig {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.lf-fig figcaption {
+  display: flex;
+  flex-direction: column;
+  min-height: 2.9em;
+}
+
+.lf-fig-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.lf-fig-good {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  line-height: 1.3;
+}
+
+.lf-chart {
+  height: clamp(84px, 16vh, 170px);
+  min-width: 0;
+}
+
+.lf-chart svg {
+  display: block;
+}
+
+.lf-chart-empty {
+  margin: 0;
+  padding-top: 24px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.lf-grid {
+  stroke: rgba(255, 255, 255, 0.08);
+}
+
+.lf-axis {
+  fill: var(--text-dim);
+  font: 10px var(--font-ui);
+}
+
+.lf-axis-note {
+  font-size: 11px;
+}
+
+.lf-roll {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.lf-pt {
+  fill: #8fb8e8;
+  stroke: var(--panel);
+  stroke-width: 1;
+}
+
+.lf-legend {
+  margin: 2px 0 4px;
+}
+
+.lf-lessons {
+  flex: 1 1 auto;
+  min-height: 90px;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+}
+
+.lf-h {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.lf-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.lf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.lf-table th,
+.lf-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--panel-2);
+  text-align: left;
+  font-weight: 400;
+}
+
+.lf-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.lf-table .lf-num {
+  text-align: right;
+}
+
+.lf-lesson-row {
+  cursor: pointer;
+}
+
+.lf-lesson-row:hover,
+.lf-lesson-row:focus-visible {
+  background: var(--panel-2);
+  outline: none;
+}
+
+.lf-lesson-row.is-on {
+  background: rgba(242, 179, 61, 0.14);
+}
+
+.lf-lesson-row th {
+  font-weight: 600;
+}
+
+.lf-badge-focus {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--ink-dark);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.lf-dots {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.lf-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  box-sizing: border-box;
+  border-radius: 50%;
+}
+
+.lf-dot--slip { background: var(--v-mistake); }
+.lf-dot--followed { background: var(--v-best); }
+.lf-dot--ok { background: var(--v-fine); }
+.lf-dot--none { border: 1.5px solid #5b6577; }
+
+.lf-side-tabs {
+  align-self: flex-start;
+  margin-left: 0;
+}
+
+.lf-lesson p {
+  margin: 0 0 8px;
+  line-height: 1.45;
+}
+
+.lf-tip {
+  font-weight: 600;
+}
+
+.lf-examples {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.lf-games {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lf-game {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--panel-2);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lf-game:hover {
+  border-color: var(--accent);
+}
+
+.lf-game-title {
+  font-weight: 700;
+}
+
+/* Practice */
+.lf-practice.has-notice {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.lf-notice {
+  margin: 0;
+  padding: 6px 14px;
+  background: rgba(229, 83, 61, 0.18);
+  color: #ffb4a6;
+  font-size: 13px;
+}
+
+.lf-bar-track {
+  display: inline-block;
+  vertical-align: middle;
+  width: 120px;
+  height: 6px;
+  margin-left: 10px;
+  border-radius: 3px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.lf-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.tile.lf-pick {
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.tile.lf-pick:hover {
+  transform: translateY(-4px);
+}
+
+.tile.lf-pick.is-selected {
+  transform: translateY(-10px);
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+.lf-q-panel p {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.lf-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lf-choice,
+.lf-throw {
+  font-size: 14px;
+  padding: 9px 16px;
+}
+
+.lf-throw {
+  align-self: flex-start;
+}
+
+.lf-choice:disabled {
+  cursor: default;
+}
+
+.lf-choice.is-right {
+  border-color: var(--v-best);
+  box-shadow: inset 0 0 0 2px var(--v-best);
+}
+
+.lf-choice.is-yours {
+  border-color: var(--v-mistake);
+  opacity: 0.8;
+}
+
+.lf-answer .lf-lead {
+  margin-top: 6px;
+}
+
+.lf-right {
+  margin-top: 4px;
+  color: #8fdcab;
+}
+
+.lf-q-lesson {
+  font-size: 13px;
+}
+
+.lf-q-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.lf-summary {
+  max-width: 560px;
+  text-align: left;
+}
+
+.lf-summary-head {
+  margin: 0 0 8px;
+  color: var(--accent);
+}
+
+.lf-summary-lessons {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+/* Review: lesson chips, lessons this game, Disagree. */
+.lf-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.lf-chip {
+  padding: 2px 8px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 11.5px;
+  cursor: help;
+}
+
+.lf-chip--slip {
+  border-color: rgba(240, 165, 48, 0.6);
+  background: rgba(240, 165, 48, 0.1);
+  color: #f5c477;
+}
+
+.lf-chip--ok {
+  border-color: rgba(63, 181, 107, 0.6);
+  background: rgba(63, 181, 107, 0.1);
+  color: #8fdcab;
+}
+
+.lf-game-lessons {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lf-game-lessons li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 12px;
+  cursor: help;
+}
+
+.lf-dis {
+  margin-top: 6px;
+  font-size: 13px;
+}
+
+.lf-dis-btn {
+  font-size: 12px;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+
+.lf-dis-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.lf-dis-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lf-dis-row .lf-dim {
+  margin-right: auto;
+}
+
+.lf-dis-form select,
+.lf-dis-form textarea {
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid #3a475c;
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.lf-dis-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.lf-dis-form .tb-btn {
+  cursor: pointer;
+}
+
+.lf-btn-main {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--ink-dark);
+  font-weight: 700;
+}
+
+.lf-dis-done {
+  color: var(--text-dim);
+  font-style: italic;
+  cursor: help;
+}
+
+.lf-dis-error {
+  margin: 4px 0 0;
+  color: #ff8f7d;
+  font-size: 12px;
+}
+
+@media (max-width: 1199.98px) {
+  .lf-stat-value {
+    font-size: 17px;
+  }
+
+  .lf-screen-btn {
+    padding: 6px 9px;
+  }
+}
+
+/* ===== T: tuning pass ===== */
+
+/* Risk chips on a step where no opponent is close to winning: muted, never the alarming colours. */
+.rv-risk--muted {
+  color: var(--text-dim, #8a94a3);
+  background: transparent;
+  border-color: currentColor;
+  border-style: dashed;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+/* ===== Mobile phase 3: phone layout =====
+   Everything below is new; no rule above is edited. The layout changes live inside media
+   queries, so a PC window (wider than 600px and taller than 500px) is untouched. Sizes come
+   from the variables the table already uses: --tile-hand-h/-w, --tile-discard-h/-w,
+   --tile-small-h/-w, --gap and --pool-gap (set on .mt-table). */
+
+/* Phone only: the device-name field and its start-screen prompt (also shown outside a media
+   query, since a narrow desktop window in local mode needs the same). */
+.device-ask {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: rgba(242, 179, 61, 0.1);
+}
+
+.device-ask-label {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--accent);
+}
+
+.device-ask-help {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.device-ask-row {
+  display: flex;
+  gap: 8px;
+}
+
+.device-ask-error {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ff8a75;
+}
+
+.set-input {
+  font: 600 14px/1.2 var(--font-ui);
+  min-height: 34px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-2);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text);
+  text-transform: uppercase;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.set-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.device-ask-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 16px;
+  letter-spacing: 0.06em;
+}
+
+.start-note {
+  align-self: center;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+  max-width: 34ch;
+}
+
+/* Touch basics and safe areas, in both phone orientations. */
+@media (orientation: portrait) and (max-width: 600px),
+       (orientation: landscape) and (max-height: 500px) {
+  html,
+  body {
+    height: 100%;
+  }
+
+  /* iPhone notch and home bar: the app keeps clear of both. */
+  body {
+    box-sizing: border-box;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    overscroll-behavior: none;
+  }
+
+  .mt-table,
+  .mt-start {
+    height: 100%;
+  }
+
+  /* No double-tap zoom behind a button, no grey flash on a tap. */
+  button,
+  .tile,
+  .hand-tile,
+  .seg-btn,
+  .tb-btn,
+  .ab-btn,
+  .big-btn,
+  .set-input {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* A long press must not start a text selection or the iOS callout. */
+  .tile,
+  .hand-tile,
+  .seat-name,
+  .ab-prompt {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  .tile-tip {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+}
+
+/* Touch screens have no hover: a tap must not leave the hover tooltip behind. The tap-and-hold
+   name is shown by ui.js (which sets .is-held), and is the only way the tip appears there. */
+@media (hover: none) {
+  .tile-tip:not(.is-held) {
+    display: none;
+  }
+
+  .tile-tip.is-held {
+    display: block;
+  }
+
+  /* Top-bar buttons as touch targets: 36px tall, still one compact row on a phone. The
+     .mt-table .topbar prefix outranks the orientation blocks' own .mt-table .tb-btn rules, so
+     36px wins there too. */
+  .mt-table .topbar .tb-btn {
+    min-height: 36px;
+    padding: 4px 9px;
+    box-sizing: border-box;
+  }
+
+  .mt-table .topbar .tb-toggle {
+    padding: 4px 8px;
+  }
+
+  /* Keyboard shortcuts mean nothing on a touch screen: nothing hints at them. */
+  .ab-btn kbd,
+  .big-btn kbd {
+    display: none;
+  }
+}
+
+/* Phone landscape (height drives it): the whole table fits the height, nothing scrolls. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .mt-table {
+    height: 100vh;
+    height: 100dvh;
+    /* A hand tile is about 5% of the screen width (~41px at 812), so 14 tiles plus a drawn one
+       and the melds fill the width where they used to leave half of it empty. */
+    --tile-hand-w: clamp(30px, 5vw, 46px);
+    --tile-hand-h: calc(var(--tile-hand-w) * 1.3333);
+    /* Discards stay readable: ~20x27 at 375 tall instead of 15x20. */
+    --tile-discard-h: clamp(20px, 7.2vh, 27px);
+    --tile-discard-w: calc(var(--tile-discard-h) * 0.75);
+    --tile-small-h: clamp(13px, 5vh, 22px);
+    --tile-small-w: calc(var(--tile-small-h) * 0.75);
+    --gap: 3px;
+    --pool-gap: 2px;
+  }
+
+  .mt-table .topbar {
+    flex-wrap: nowrap;
+    gap: 6px;
+    padding: 3px 8px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .mt-table .topbar .brand,
+  .mt-table .topbar .topbar-tally,
+  .mt-table .topbar .topbar-focus {
+    display: none;
+  }
+
+  /* The side seat columns squeeze instead of demanding 150px each (that would overflow 667px).
+     Every seat and every pool has a named area: an unplaced one is auto-placed into an implicit
+     row and lands outside the table (that put Bot 2's discards under the hand). */
+  .mt-table .felt {
+    grid-template-columns: minmax(0, 1fr) auto auto auto minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+    grid-template-areas:
+      "top   top   top    top    top"
+      "lseat pleft ptop   pright rseat"
+      "lseat pleft center pright rseat"
+      ".     pbot  pbot   pbot   ."
+      "abar  abar  abar   abar   abar"
+      "bot   bot   bot    bot    bot";
+    gap: 2px;
+    padding: 2px 6px;
+    overflow: hidden;
+  }
+
+  /* Pools and seats give way rather than pushing the hand off the bottom. */
+  .mt-table .pool,
+  .mt-table .seat {
+    min-height: 0;
+    min-width: 0;
+  }
+
+  .mt-table .pool--top,
+  .mt-table .pool--bottom {
+    grid-template-columns: repeat(9, var(--tile-discard-w));
+    min-height: 0;
+    max-height: calc(var(--tile-discard-h) * 2 + var(--pool-gap));
+    justify-self: center;
+    align-content: start;
+    overflow: hidden;
+  }
+
+  .mt-table .pool--left,
+  .mt-table .pool--right {
+    grid-template-rows: repeat(3, var(--tile-discard-h));
+    max-height: calc(var(--tile-discard-h) * 3 + var(--pool-gap) * 2);
+    overflow: hidden;
+  }
+
+  /* A ticker would take a whole row of a 375px-tall screen. */
+  .mt-table .ticker {
+    display: none;
+  }
+
+  .mt-table .seat {
+    padding: 3px 6px;
+    gap: 2px;
+  }
+
+  .mt-table .seat-head {
+    font-size: 10px;
+    gap: 3px;
+  }
+
+  /* Your seat: name on the left, hand to the right, one row, inside the bottom row's height.
+     The row is centred in the felt with a little air at both edges (plus the notch's inset), so
+     the first tile is never clipped by the panel's rounded corner. */
+  .mt-table .seat--bottom {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    justify-self: center;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 2px calc(8px + env(safe-area-inset-right, 0px)) 2px calc(8px + env(safe-area-inset-left, 0px));
+    max-height: 100%;
+    overflow: hidden;
+  }
+
+  /* The name line would take half the height; the compass shows the turn. */
+  .mt-table .seat--bottom .seat-head {
+    display: none;
+  }
+
+  .mt-table .seat--bottom .seat-body {
+    gap: 4px;
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+
+  .mt-table .seat-hand--you {
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+
+  .mt-table .hand-tiles {
+    gap: 1px;
+    flex-wrap: nowrap;
+  }
+
+  .mt-table .hand-drawn {
+    margin-left: 3px;
+  }
+
+  /* Action bar: a slim row between the table and the hand (44px targets, never over the hand). */
+  .mt-table .actionbar {
+    min-height: 44px;
+    max-height: 44px;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 0 6px;
+    gap: 2px 6px;
+    flex-wrap: nowrap;
+    align-self: center;
+  }
+
+  /* The prompt is the first thing to go when the width is tight; the buttons stay. */
+  .mt-table .ab-status {
+    gap: 4px;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .mt-table .ab-text {
+    overflow: hidden;
+  }
+
+  .mt-table .ab-prompt,
+  .mt-table .ab-claim {
+    font-size: 11px;
+  }
+
+  .mt-table .ab-hint {
+    display: none;
+  }
+
+  .mt-table .ab-buttons {
+    gap: 3px;
+    flex: none;
+  }
+
+  .mt-table .ab-btn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 4px 6px;
+    font-size: 12px;
+  }
+
+  .mt-table .ab-btn kbd {
+    display: none; /* no keyboard on a phone */
+  }
+
+  .mt-table .ab-pick {
+    min-height: 44px;
+  }
+
+  .mt-table .compass {
+    grid-template-columns: 22px auto 22px;
+    grid-template-rows: 18px auto 18px;
+    padding: 2px;
+  }
+
+  .mt-table .compass-wind {
+    width: 18px;
+    height: 18px;
+    font-size: 11px;
+  }
+
+  .mt-table .wall-num {
+    font-size: 16px;
+  }
+
+  .mt-table .wall-label {
+    font-size: 9px;
+  }
+
+  .mt-table .ab-timer-track {
+    width: 60px;
+  }
+}
+
+/* Phone portrait: your hand at the bottom, the bots compact above, the action bar fixed
+   between them, a slim top bar. Fits 375x667 and 390x844 with no sideways scroll. */
+@media (orientation: portrait) and (max-width: 600px) {
+  .mt-table {
+    height: 100vh;
+    height: 100dvh;
+    /* 14 tiles in two rows: seven across the width, whatever the phone. */
+    --tile-hand-w: calc((100vw - 64px) / 7);
+    --tile-hand-h: calc(var(--tile-hand-w) * 1.3333);
+    --tile-discard-h: clamp(18px, 6vw, 30px);
+    --tile-discard-w: calc(var(--tile-discard-h) * 0.75);
+    --tile-small-h: clamp(16px, 5.4vw, 26px);
+    --tile-small-w: calc(var(--tile-small-h) * 0.75);
+    --gap: 4px;
+    --pool-gap: 2px;
+  }
+
+  /* Slim top bar: the game line and the buttons; the rest would only wrap onto more rows. */
+  .mt-table .topbar {
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    padding: 4px 8px;
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
+  .mt-table .topbar .brand,
+  .mt-table .topbar .topbar-bots,
+  .mt-table .topbar .topbar-tally,
+  .mt-table .topbar .topbar-focus,
+  .mt-table .topbar .tb-sep {
+    display: none;
+  }
+
+  .mt-table .topbar-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .mt-table .tb-btn {
+    min-height: 32px;
+    padding: 4px 8px;
+  }
+
+  /* Four rows: the far player, the side players and their pools, the centre, the near player's
+     discards; then the action bar and your hand, the last two with their own heights. */
+  .mt-table .felt {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+    grid-template-areas:
+      "top   top   top"
+      "lseat ptop  rseat"
+      "pleft center pright"
+      "pbot  pbot  pbot"
+      "abar  abar  abar"
+      "bot   bot   bot";
+    padding: 3px 6px;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  /* Pools, seats and the centre give way instead of pushing the hand off the bottom. */
+  .mt-table .felt > * {
+    min-height: 0;
+  }
+
+  .mt-table .center {
+    min-height: 0;
+    gap: 2px;
+  }
+
+  /* No room for the ticker; the centre announcements still name every claim. */
+  .mt-table .ticker {
+    display: none;
+  }
+
+  .mt-table .seat {
+    padding: 3px 6px;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .mt-table .seat-head {
+    font-size: 11px;
+    gap: 3px;
+  }
+
+  /* The side players sit in one narrow column each: a compact stack of backs (or a count) in a
+     box the column can hold, never a full 13-tile row running off the screen. */
+  .mt-table .seat--left,
+  .mt-table .seat--right {
+    justify-self: center;
+    padding: 3px 3px;
+    width: min-content;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .mt-table .seat--left .seat-head,
+  .mt-table .seat--right .seat-head {
+    display: grid;
+    grid-template-columns: auto auto;
+    justify-content: center;
+    align-content: start;
+    justify-items: center;
+    gap: 2px 4px;
+    font-size: 11px;
+    padding: 0;
+    white-space: nowrap; /* "Bot 1" and "13 tiles" stay whole: no word-per-line pill */
+  }
+
+  /* The name alone on the first line, the seat wind and the count beneath it. */
+  .mt-table .seat--left .seat-name,
+  .mt-table .seat--right .seat-name,
+  .mt-table .seat--left .seat-wind,
+  .mt-table .seat--right .seat-wind,
+  .mt-table .seat--left .seat-count,
+  .mt-table .seat--right .seat-count {
+    white-space: nowrap;
+  }
+
+  .mt-table .seat--left .seat-name,
+  .mt-table .seat--right .seat-name {
+    grid-column: 1 / -1;
+    font-size: 12px;
+  }
+
+  /* The Chi badge: its own full-width line, short, never a tall narrow pill. */
+  .mt-table .seat--left .chi-from-label,
+  .mt-table .seat--right .chi-from-label {
+    grid-column: 1 / -1;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 1px 4px;
+    border-radius: 4px;
+    font-size: 10px;
+    line-height: 1.2;
+    white-space: normal;
+    text-align: center;
+    overflow-wrap: normal;
+  }
+
+  .mt-table .seat--left .seat-body,
+  .mt-table .seat--right .seat-body {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 3px;
+  }
+
+  .mt-table .seat--left .seat-hand,
+  .mt-table .seat--right .seat-hand {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  /* Overlapping backs keep the stack narrow enough for the column. */
+  .mt-table .seat--left .seat-hand > .tile--back + .tile--back,
+  .mt-table .seat--right .seat-hand > .tile--back + .tile--back {
+    margin-left: calc(var(--tile-small-w) * -0.62);
+  }
+
+  .mt-table .seat--left .seat-melds,
+  .mt-table .seat--right .seat-melds,
+  .mt-table .seat--left .seat-flowers,
+  .mt-table .seat--right .seat-flowers {
+    justify-content: center;
+    gap: 2px;
+  }
+
+  /* The bots' discards: wider rows, the side pools shorter, all clipped to their cell. */
+  .mt-table .pool--top,
+  .mt-table .pool--bottom {
+    grid-template-columns: repeat(9, var(--tile-discard-w));
+    min-height: 0;
+    justify-self: stretch;
+    align-content: start;
+    overflow: hidden;
+  }
+
+  .mt-table .pool--left,
+  .mt-table .pool--right {
+    grid-template-rows: repeat(4, var(--tile-discard-h));
+    min-width: 0;
+  }
+
+  .mt-table .compass {
+    grid-template-columns: 24px auto 24px;
+    grid-template-rows: 20px auto 20px;
+  }
+
+  .mt-table .compass-wind {
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+  }
+
+  .mt-table .wall-num {
+    font-size: 18px;
+  }
+
+  /* Your seat: the name line above the hand; the hand wraps to two rows when it must. */
+  .mt-table .seat--bottom {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 3px;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 4px 6px;
+  }
+
+  .mt-table .seat--bottom .seat-head {
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 11px;
+    gap: 2px 8px;
+  }
+
+  .mt-table .seat--bottom .seat-body {
+    flex-wrap: wrap;
+    gap: 3px;
+    max-width: 100%;
+  }
+
+  .mt-table .seat-hand--you {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1px;
+    max-width: 100%;
+  }
+
+  /* The tiles flow as one wrapped row: 14 tiles in two rows of seven, the drawn one included
+     (as a separate box it would take a row of its own). */
+  .mt-table .hand-tiles {
+    display: contents;
+  }
+
+  .mt-table .hand-drawn {
+    display: contents;
+  }
+
+  .mt-table .seat-hand--you .hand-tile:nth-child(8) {
+    margin-left: 0;
+  }
+
+  /* The drawn tile keeps a little air, whatever row it lands on. */
+  .mt-table .seat-hand--you .hand-tile.is-drawn {
+    margin-left: 6px;
+  }
+
+  /* The action bar: its own row right above the hand, 44px targets, never over the hand. */
+  .mt-table .actionbar {
+    min-height: 44px;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 2px 6px;
+    gap: 3px 8px;
+  }
+
+  .mt-table .ab-prompt {
+    font-size: 12px;
+    white-space: normal;
+  }
+
+  .mt-table .ab-hint {
+    font-size: 11px;
+  }
+
+  .mt-table .ab-buttons {
+    gap: 4px;
+  }
+
+  .mt-table .ab-btn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 4px 8px;
+    font-size: 13px;
+    justify-content: center;
+  }
+
+  .mt-table .ab-btn kbd {
+    display: none;
+  }
+
+  .mt-table .ab-pick {
+    min-height: 44px;
+  }
+
+  .mt-table .ab-timer-track {
+    width: 70px;
+  }
+
+  /* A picker floats above the bar: keep it inside the screen. */
+  .mt-table .ab-picker {
+    max-width: calc(100vw - 20px);
+    box-sizing: border-box;
+    flex-wrap: wrap;
+  }
+}
+
+/* Panels on a narrow screen: settings, the start screen and the end screen at 375px wide. */
+@media (max-width: 600px) {
+  .panel {
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  .panel--start,
+  .panel--overlay,
+  .panel--end {
+    width: 100%;
+    max-height: calc(100vh - 16px);
+  }
+
+  .start {
+    padding: 8px;
+  }
+
+  .start--learn {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+
+  .start-desc {
+    font-size: 13px;
+  }
+
+  /* A setting's control goes under its text instead of squeezing it. */
+  .set-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .set-control {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .seg {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    max-width: 100%;
+  }
+
+  .seg-btn {
+    min-height: 36px;
+    padding: 8px 10px;
+  }
+
+  /* The device-name field fills the row and never pushes past the panel's edge. */
+  .set-control > .set-input {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    min-height: 40px;
+    font-size: 16px; /* iOS zooms the page in on a field below 16px */
+  }
+
+  .panel-foot {
+    flex-wrap: wrap;
+  }
+
+  .big-btn {
+    min-height: 44px;
+    padding: 12px 18px;
+    flex: 1 1 auto;
+  }
+
+  .big-btn--play {
+    padding: 14px 32px;
+  }
+
+  .overlay,
+  .end-overlay {
+    box-sizing: border-box;
+    padding: 8px;
+    overflow-y: auto;
+  }
+
+  /* The end screen: four hands, tightened so they read at 375px. */
+  .end-row {
+    grid-template-columns: 62px minmax(0, 1fr);
+    gap: 2px 8px;
+    padding: 5px 6px;
+  }
+
+  .end-who {
+    font-size: 12px;
+    gap: 2px 4px;
+  }
+
+  .end-title {
+    font-size: 19px;
+  }
+
+  .end-how,
+  .end-status {
+    font-size: 12px;
+  }
+
+  .end-tiles {
+    gap: 3px 6px;
+  }
+
+  .end-melds,
+  .end-hand {
+    gap: 3px 6px;
+  }
+
+  .end-stats,
+  .end-log {
+    font-size: 12px;
+  }
+}
+
+/* Phone app (PWA): "Update ready, tap to reload", above the table and clear of the notch and
+   home bar. Only the built phone page adds it (js/pwa.js). */
+.pwa-update {
+  position: fixed;
+  left: 50%;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 1100;
+  max-width: calc(100vw - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+  padding: 12px 20px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--ink-dark);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}

@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Mahjong Trainer</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#14352b">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Mahjong">
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module">
+    globalThis.MAHJONG_APP_MODE = 'local';
+  </script>
+  <script type="module">
+    import './js/pwa.js';
+  </script>
+  <script type="module">
+    import { createSession, DEFAULT_SETTINGS, randomSeed } from './js/controller.js';
+    import { renderTable, renderStartScreen, suspendUi } from './js/ui.js';
+    import { openReview } from './js/reviewui.js';
+    import {
+      configureLearn, refreshLearning, startExtras, currentFocusLine, dismissFocusLine, endExtra, openProgress, openPractice, closeLearn,
+    } from './js/learnui.js';
+    import { saveLog } from './js/logger.js';
+    import { loadSettings, saveSettingsPatch } from './js/settings.js';
+    import { createSound, createGameAudio, unlockSoundOnGesture } from './js/sound.js';
+    // ?seed=N fixes the first game (and the bots' choices); ?autoplay=1 lets a bot play your seat;
+    // ?help=0 turns claim help off. URL parameters apply to this page load only and are not saved.
+    // ?review=1 opens the list of saved games; ?review=<log file name> opens that game's review.
+    // ?progress=1 opens Progress (?progress=<lesson id> at that lesson); ?practice=1 opens Practice
+    // (?practice=<log file name>: that game's questions only).
+    // "New game" continues with dealer = nextDealer(previous game) and a new random seed.
+    const params = new URLSearchParams(location.search);
+    const seedParam = params.get('seed');
+    const seed = seedParam !== null && /^\d+$/.test(seedParam) ? Number(seedParam) >>> 0 : randomSeed();
+    const autoplay = params.get('autoplay') === '1';
+    const overrides = params.get('help') === '0' ? { claimHelp: false } : {};
+
+    let storage = null;
+    try { storage = window.localStorage; } catch { storage = null; }
+    // The phone app (see the mode script above): logs in IndexedDB, and no Review, Progress or
+    // Practice, which read the PC's server.
+    const local = globalThis.MAHJONG_APP_MODE === 'local';
+    let saved = loadSettings(storage); // what is stored
+    let current = { ...saved, ...overrides }; // what is in force on this page
+    const root = document.getElementById('app');
+    let session = null;
+
+    // Sounds: the AudioContext starts on the first gesture (iPhone needs one before any sound);
+    // the Sound setting applies at once. The unlock listeners stand down once it is running.
+    const sound = createSound();
+    const gameAudio = createGameAudio(sound);
+    sound.setEnabled(current.sound);
+    unlockSoundOnGesture(sound);
+    // Bubble phase, after the UI handled the click: turning Sound off is silent, on clicks.
+    document.addEventListener('click', (ev) => {
+      if (ev.target.closest && ev.target.closest('button')) sound.play('click', { immediate: true });
+    });
+    setInterval(() => gameAudio.tick(session && session.controller, Date.now()), 100);
+    window.mahjongSound = sound;
+
+    // A change made in the panel or a quick toggle: saved, and applied (live keys now,
+    // the rest from the next game).
+    // Another tab may have saved other keys since: only this patch is written on top of the stored
+    // settings, and this page keeps its own values for the keys it did not change.
+    function changeSettings(patch) {
+      saved = saveSettingsPatch(storage, patch, saved);
+      current = { ...current, ...patch };
+      if ('sound' in patch) sound.setEnabled(current.sound);
+      if (session) session.setSettings(patch);
+    }
+
+    // Options for renderTable; also used to return from the review screen to the table.
+    // Review and Progress are left out on the phone: both read the PC's server.
+    function tableOpts(s) {
+      return {
+        tally: s.tally,
+        gameNumber: s.gameNumber,
+        onNewGame: (opts) => s.newGame(opts),
+        getSettings: () => current,
+        onSettingsChange: changeSettings,
+        onSound: (name) => sound.play(name, { immediate: true }),
+        // Top bar (abandon: the game in progress is given up) and end screen (file: this game).
+        ...(local ? {} : {
+          onReview: ({ file = null, abandon = false } = {}) => {
+            if (abandon) s.controller.stop();
+            go({ to: 'review', file, from: abandon ? 'start' : 'table' });
+          },
+          onProgress: ({ abandon = false } = {}) => {
+            if (abandon) s.controller.stop();
+            go({ to: 'progress', from: abandon ? 'start' : 'table' });
+          },
+        }),
+        getFocusLine: local ? null : currentFocusLine,
+        onFocusDismiss: dismissFocusLine,
+        endExtra: local ? null : endExtra,
+      };
+    }
+
+    function showStart() {
+      renderStartScreen(root, {
+        getSettings: () => current,
+        onChange: changeSettings,
+        onPlay: play,
+        onReview: local ? null : () => go({ to: 'review', from: 'start' }),
+        learn: local ? null : startExtras,
+      });
+      if (!local) refreshLearning(); // the learning loop fetches /api/logs: the PC only
+    }
+
+    // The ?review / ?progress / ?practice parameter of the screen on show (one at a time).
+    function setScreenParam(name, value) {
+      const url = new URL(location.href);
+      for (const k of ['review', 'progress', 'practice']) url.searchParams.delete(k);
+      if (value) url.searchParams.set(name, value);
+      history.replaceState(null, '', url);
+    }
+
+    // Review, Progress and Practice. Back returns to where the player came from (`from`: the start
+    // screen or the finished game's table), or to `back` when given (a review opened from Progress
+    // or Practice returns there). Moving between the three screens keeps the same Back.
+    let origin = () => showStart();
+    function go(nav) {
+      if (nav.from === 'start') origin = () => showStart();
+      else if (nav.from === 'table' && session) {
+        const s = session;
+        origin = () => renderTable(root, s.controller, tableOpts(s));
+      }
+      const back = nav.back ?? origin;
+      suspendUi();
+      closeLearn();
+      if (nav.to === 'review') {
+        openReview(root, {
+          file: nav.file ?? null,
+          step: nav.step ?? null,
+          getSettings: () => current,
+          onUrl: (value) => setScreenParam('review', value),
+          onBack: back,
+          onNav: (to) => go({ to, back }),
+        });
+      } else if (nav.to === 'progress') {
+        openProgress({ lesson: nav.lesson ?? null, resume: Boolean(nav.resume), onBack: back, onUrl: (value) => setScreenParam('progress', value) });
+      } else if (nav.to === 'practice') {
+        openPractice({ file: nav.file ?? null, resume: Boolean(nav.resume), onBack: back, onUrl: (value) => setScreenParam('practice', value) });
+      }
+    }
+
+    function play() {
+      // After a game abandoned for the review screen: the next game of the same session.
+      if (session) {
+        session.newGame({ abandon: true });
+        return;
+      }
+      session = createSession({
+        settings: { ...DEFAULT_SETTINGS, ...current, autoplayHuman: autoplay },
+        seed,
+        dealer: 0,
+        makeSeed: randomSeed,
+        onUpdate: (c, s) => renderTable(root, c, tableOpts(s)),
+        onEvents: gameAudio.onEvents,
+        onHumanPrompt: gameAudio.onHumanPrompt,
+        // Autoplay games are demos, not your play, so they are not saved. The phone stores the
+        // log in its own database (device name, set before Play); the PC sends it to the server.
+        saveLog: autoplay ? null : (log) => (local
+          ? saveLog(log, undefined, { mode: 'local', device: current.device })
+          : saveLog(log)),
+      });
+      window.mahjongSession = session;
+    }
+
+    configureLearn({ root, getSettings: () => current, onNav: go });
+    showStart();
+    const reviewParam = params.get('review');
+    const progressParam = params.get('progress');
+    const practiceParam = params.get('practice');
+    if (local && (reviewParam || progressParam || practiceParam)) {
+      // The phone has no Review, Progress or Practice: drop the parameter and stay on the start
+      // screen rather than fetch /api and fail.
+      setScreenParam('review', null);
+    } else if (reviewParam) go({ to: 'review', file: reviewParam === '1' ? null : reviewParam, from: 'start' });
+    else if (progressParam) go({ to: 'progress', lesson: progressParam === '1' ? null : progressParam, from: 'start' });
+    else if (practiceParam) go({ to: 'practice', file: practiceParam === '1' ? null : practiceParam, from: 'start' });
+    // window.mahjong is always the current game's controller (null before Play).
+    Object.defineProperty(window, 'mahjong', { get: () => session && session.controller, configurable: true });
+  </script>
+</body>
+</html>
