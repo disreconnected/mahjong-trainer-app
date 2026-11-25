@@ -1327,11 +1327,17 @@ function takeSuppressedClick() {
 const handTileEls = (root) => [...root.querySelectorAll('.seat--bottom .hand-tile[data-idx]')];
 
 // True when the hand's tiles sit on more than one row (a phone in portrait wraps them).
+// A selected tile is raised and the drawn tile sits a little apart, so only a gap of half a
+// tile's height or more counts as another row.
 function handHasSeveralRows(root) {
-  const els = handTileEls(root);
-  if (els.length < 2) return false;
-  const top = els[0].getBoundingClientRect().top;
-  return els.some((el) => Math.abs(el.getBoundingClientRect().top - top) > 2);
+  const rects = handTileEls(root).map((el) => el.getBoundingClientRect());
+  return tilesOnSeveralRows(rects);
+}
+
+export function tilesOnSeveralRows(rects) {
+  if (rects.length < 2) return false;
+  const top = Math.min(...rects.map((r) => r.top));
+  return rects.some((r) => r.top - top >= r.height / 2);
 }
 
 // Base positions of the hand tiles (no drag transforms applied yet).

@@ -8,14 +8,16 @@ import { tileLabel } from './tileart.js';
 import { discardRisk, threats, riskIndex, RISK_LEVELS } from './safety.js';
 
 /** Version of the analysis itself (not of the log): bump when grading changes. */
-export const REVIEW_VERSION = 10;
+export const REVIEW_VERSION = 14;
 
 /**
  * Grading thresholds, in one place (tuning pass, from the study in docs/review-tuning.md).
  * Same distance from ready: a throw is 'fine' when it keeps at most max(fineAbs, fineRel x the
  * best's useful tiles) fewer useful tiles; claims use the same band. A speed inaccuracy's gapSize
  * is 'large' when it loses more than largeRel of the best's useful tiles, 'moderate' above
- * moderateRel, else 'small'. longThinkMs: a long think (summary.longEqualThinks, on equal or nearly
+ * moderateRel, else 'small'. A passed Chi/Pong whose same-distance gain is 'large' (the taken count
+ * is the base) is an inaccuracy unless player 0 is threatened (AD1) or the offer is a Pong that would use the hand's only
+ * pair and leave mostly single-tile waits (AE1). longThinkMs: a long think (summary.longEqualThinks, on equal or nearly
  * equal choices). slowThinkMs: a slow decision for the pace line (summary.slowThinks, V2).
  */
 export const GRADING = Object.freeze({ fineAbs: 3, fineRel: 0.2, moderateRel: 0.25, largeRel: 0.4, longThinkMs: 20000, slowThinkMs: 30000 });
@@ -99,6 +101,94 @@ function fineClaimCost(taken, withClaim, withoutClaim) {
   return taken
     ? `Either was fine: taking it added ${tiles} but did not bring you closer`
     : `Either was fine: taking it would have added ${tiles} but not brought you closer`;
+}
+
+// AD1: a pass that gave up a large gain at the same distance.
+// "Taking it would have added 21 useful tiles (37 instead of 16) at the same distance; opening the hand costs nothing by itself"
+function largeClaimCost(withClaim, withoutClaim) {
+  return `Taking it would have added ${usefulTiles(withClaim - withoutClaim)} (${withClaim} instead of ${withoutClaim}) at the same distance; ` +
+    'opening the hand costs nothing by itself';
+}
+
+// AE1: a pass that gave up a large gain by not Ponging the hand's only pair, 1 from ready, when the Pong would
+// have left mostly single-tile waits.
+// "Either was fine: taking it would have added 11 useful tiles (26 instead of 15), but it would have used your only pair,
+// so most of the new ready hands would wait on a single tile"
+function pairPongCost(withClaim, withoutClaim) {
+  return `Either was fine: taking it would have added ${usefulTiles(withClaim - withoutClaim)} (${withClaim} instead of ${withoutClaim}), ` +
+    'but it would have used your only pair, so most of the new ready hands would wait on a single tile';
+}
+
+/**
+ * onlyRealPairOf(hand, meldCount) -> the code of the hand's only pair, or null: the one code held exactly twice
+ * among realPairs (the keep-a-pair notion; lessons.js onlyPair is this with a meldCount).
+ */
+export function onlyRealPairOf(hand, meldCount) {
+  const pairs = realPairs(hand, meldCount).filter((c) => countIn(hand, c) === 2);
+  return pairs.length === 1 ? pairs[0] : null;
+}
+
+// AE1: the share of a hand's useful-tile weight (the live copies of each useful draw) that reaches a ready hand whose
+// best wait (the throw leaving the most live winning tiles, the first on a tie) is a single tile code. The hand is
+// 1 from ready (3k+1 tiles); counts are player 0's visible counts.
+function singleWaitShare(hand, meldCount, counts) {
+  let weight = 0;
+  let single = 0;
+  for (const { tile, live } of acceptance(hand, meldCount, 1, counts).accepts) {
+    if (live <= 0) continue;
+    const seen = new Map(counts).set(tile, (counts.get(tile) || 0) + 1);
+    const drawn = [...hand, tile];
+    let best = null;
+    for (const d of new Set(drawn)) {
+      const rest = without(drawn, [d]);
+      if (shanten(rest, meldCount) !== 0) continue;
+      const codes = waitsOf(rest, meldCount);
+      const size = codes.reduce((n, c) => n + liveOf(seen, c), 0);
+      if (!best || size > best.size) best = { size, one: codes.length === 1 };
+    }
+    if (best) {
+      weight += live;
+      if (best.one) single += live;
+    }
+  }
+  return weight ? single / weight : 0;
+}
+
+// AE1: passing a Pong of the hand's only pair (onlyRealPairOf is the claimed tile), 1 from ready, is exempt from AD1
+// when the Pong would leave mostly single-tile waits: the share of its useful-tile weight reaching a single-tile
+// ready wait (after the review's best follow-up discard) is above half and above the passed hand's share.
+function pongCostsPairWaits(hand, meldCount, tile, counts) {
+  const taken = without(hand, [tile, tile]);
+  const top = discardOptions(taken, meldCount + 1, counts)[0];
+  if (top.shanten !== 1) return false;
+  const afterShare = singleWaitShare(without(taken, [top.tile]), meldCount + 1, counts);
+  return afterShare > 0.5 && afterShare > singleWaitShare(hand, meldCount, counts);
+}
+
+// Passing a Chi or Pong that keeps the distance but adds useful tiles beyond the fine band (the best such
+// offer): fine with the neutral sentence (W1), or, when the gap is large (AD1: gapSizeOf with the taken count
+// as the base, as a discard gap uses the best's), an inaccuracy. Not while player 0 is threatened: "opening
+// the hand costs nothing by itself" is false then (fewer concealed tiles to fold with, and the discard the
+// claim forces is not weighed for risk), so the pass stays fine. AE1: a Pong that uses the hand's only pair and
+// would leave mostly single-tile waits (`pongCostsOnlyPairWaits`, the claim step's flag, only set 1 from ready)
+// is not judged by AD1: its extra useful tiles mostly buy single-tile waits, so opening the hand did cost
+// something. Offers are judged one by one, so a large Chi still makes the pass an inaccuracy. Shared by
+// gradeClaim and gradeClaimChoice.
+function richerPassOf(offers, before, passedAcceptance, threatened, pongCostsOnlyPairWaits) {
+  const richer = offers
+    .filter((o) => (o.action.type === 'chi' || o.action.type === 'pong') && o.shantenIfTaken === before &&
+      o.acceptanceIfTaken - passedAcceptance > fineGap(o.acceptanceIfTaken))
+    .sort((a, b) => b.acceptanceIfTaken - a.acceptanceIfTaken);
+  if (!richer.length) return null;
+  const large = (o) => gapSizeOf(o.acceptanceIfTaken, passedAcceptance) === 'large';
+  const result = (o, verdict, cost) => ({ verdict, cost, loss: { shanten: 0, acceptance: o.acceptanceIfTaken - passedAcceptance } });
+  if (!threatened) {
+    const judged = richer.find((o) => large(o) && !(pongCostsOnlyPairWaits && o.action.type === 'pong'));
+    if (judged) return result(judged, 'inaccuracy', largeClaimCost(judged.acceptanceIfTaken, passedAcceptance));
+    // The best offer is large but is the exempt Pong (a large offer that is not would have been judged above).
+    if (large(richer[0])) return result(richer[0], 'fine', pairPongCost(richer[0].acceptanceIfTaken, passedAcceptance));
+  }
+  return result(richer[0], 'fine', fineClaimCost(false, richer[0].acceptanceIfTaken, passedAcceptance));
 }
 
 // "This Kong left you 2 tiles from ready instead of 1"; when the hand was ready, said without nesting.
@@ -423,6 +513,10 @@ function replay(log) {
 const SEVERITY = { best: 0, fine: 1, inaccuracy: 2, mistake: 3 };
 const RISK_WORD = { safe: 'safe', low: 'low risk' };
 const sets = (n) => `${n} set${n === 1 ? '' : 's'}`;
+// "low risk against medium" (the safer level first), shared by saferReasonOf and the tied-best risk
+// tie-break.
+const riskAgainst = (saferLevel, otherLevel) =>
+  `${saferLevel === 'safe' ? 'safe' : `${saferLevel} risk`} against ${saferLevel === 'safe' ? `${otherLevel} risk` : otherLevel}`;
 
 export const SAFETY_NOTES = Object.freeze({
   justified: 'Risky, but your hand was close enough to justify it',
@@ -556,6 +650,8 @@ export function isSpare(options, hand, tile) {
 /**
  * slipReasonOf(options, hand, meldCount, chosenTile) -> { lesson, tile, words } or null: why a
  * throw slower than the best was slow, in plain words.
+ * 'keep-a-pair' (AB1): the hand had exactly one real pair, thrown here, while a best throw (`tile`)
+ * was held once.
  * 'keep-your-pairs': it broke one of 2+ real pairs while a best throw (`tile`) was not a pair.
  * 'spare-tile': a best throw (`tile`) was spare, and the thrown tile added something new.
  */
@@ -564,6 +660,18 @@ export function slipReasonOf(options, hand, meldCount, chosenTile) {
   const speedBest = options.filter((o) => o.shanten === top.shanten && o.acceptance === top.acceptance);
   if (speedBest.some((o) => o.tile === chosenTile)) return null;
   const pairs = realPairs(hand, meldCount).filter((c) => countIn(hand, c) === 2);
+  if (pairs.length === 1 && pairs.includes(chosenTile)) {
+    const alt = speedBest.find((o) => countIn(hand, o.tile) === 1);
+    if (alt) {
+      return {
+        lesson: 'keep-a-pair',
+        tile: alt.tile,
+        words: isSpare(options, hand, alt.tile)
+          ? `you broke your only pair (the ${tilesLabel(chosenTile)}) while ${the(alt.tile)} was spare`
+          : `you broke your only pair (the ${tilesLabel(chosenTile)}) instead of throwing ${the(alt.tile)}`,
+      };
+    }
+  }
   if (pairs.length >= 2 && pairs.includes(chosenTile)) {
     const alt = speedBest.find((o) => countIn(hand, o.tile) < 2);
     if (alt) {
@@ -673,8 +781,7 @@ export function saferReasonOf(options, chosenTile, threat, wallLeft) {
     const what = g.sets ? sets(g.sets) : `no sets with ${wallLeft} tiles left`;
     return `${andList(g.names)} ${g.names.length > 1 ? 'show' : 'shows'} ${what}`;
   }));
-  const words = `${the(chosenTile)} was safer (${chosen.risk.level === 'safe' ? 'safe' : `${chosen.risk.level} risk`} against ` +
-    `${chosen.risk.level === 'safe' ? `${bestLevel} risk` : bestLevel})${showing ? ` while ${showing}` : ''}`;
+  const words = `${the(chosenTile)} was safer (${riskAgainst(chosen.risk.level, bestLevel)})${showing ? ` while ${showing}` : ''}`;
   return { tile: chosenTile, level: chosen.risk.level, bestLevel, words };
 }
 
@@ -745,6 +852,23 @@ function gradeRaw(options, chosenTile, threatened) {
     let sVerdict = 'best';
     let sCost = null;
     const mine = ri(chosen);
+    // AC1: a speed tie is broken by risk. `best` keeps only the tied tiles at the lowest risk level
+    // among them, ordered by risk score (the calmest first), and throwing a riskier tied tile is
+    // Fine (a reckless/risky safety verdict below still takes precedence). That Fine cost says what
+    // the safety note would, so the note is left off those steps.
+    let ac1Cost = null;
+    if (bestReason === 'speed' && speedBest.length > 1) {
+      const low = Math.min(...speedBest.map((t) => ri(optOf(t))));
+      if (speedBest.some((t) => ri(optOf(t)) > low)) {
+        best = speedBest.filter((t) => ri(optOf(t)) === low)
+          .sort((a, b) => optOf(a).risk.score - optOf(b).risk.score);
+        if (speedBest.includes(chosen.tile) && mine > low) {
+          verdict = 'fine';
+          cost = `Same speed, but ${the(best[0])} was safer (${riskAgainst(RISK_LEVELS[low], chosen.risk.level)})`;
+          ac1Cost = cost;
+        }
+      }
+    }
     if (mine === 3) {
       const sameSpeedSafer = options.filter((o) => o !== chosen && ri(o) <= mine - 2 &&
         (o.shanten < chosen.shanten || (o.shanten === chosen.shanten &&
@@ -762,8 +886,27 @@ function gradeRaw(options, chosenTile, threatened) {
         safetyVerdict = 'risky';
         sVerdict = 'inaccuracy';
         sCost = `Same speed, but a safer tile was available: ${tileLabel(sameSpeedSafer[0].tile)}`;
+      } else if (chosen.shanten <= 1) {
+        // AC2: at the best distance, a tile one level safer, inside the fine band, makes the throw
+        // not "justified"; the verdict stays as it is. A speed mistake keeps the old note.
+        const near = chosen.shanten === top.shanten
+          ? options.filter((o) => o !== chosen && o.shanten === chosen.shanten && ri(o) === mine - 1 &&
+            o.acceptance > 0 && o.acceptance >= chosen.acceptance - fineGap(Math.max(o.acceptance, chosen.acceptance)))
+          : [];
+        const alt = near.reduce((a, b) => (!a || b.acceptance > a.acceptance ? b : a), null);
+        if (!alt) safetyNote = SAFETY_NOTES.justified;
+        else if (best.includes(alt.tile)) {
+          // AE2: the speed cost already names its useful tiles ("9 instead of 10"), so the note only adds the risk.
+          safetyNote = `Risky: ${the(alt.tile)}, ${best.length > 1 ? 'one of the best throws' : 'the best throw'}, was also less risky (${alt.risk.level})`;
+        } else if (alt.acceptance > chosen.acceptance) {
+          safetyNote = `Risky: ${the(alt.tile)} had more useful tiles (${alt.acceptance} against ${chosen.acceptance}) and was less risky (${alt.risk.level})`;
+        } else if (alt.acceptance === chosen.acceptance) {
+          safetyNote = `Risky: ${the(alt.tile)} was as fast and less risky (${alt.risk.level})`;
+        } else {
+          safetyNote = `Risky: ${the(alt.tile)} was nearly as fast (${usefulTiles(alt.acceptance)} against ${chosen.acceptance}) and less risky (${alt.risk.level})`;
+        }
       } else {
-        safetyNote = chosen.shanten <= 1 ? SAFETY_NOTES.justified : SAFETY_NOTES.noSafer;
+        safetyNote = SAFETY_NOTES.noSafer;
       }
     } else if (mine <= 1 && speedVerdict !== 'best' && speedBestHigh) {
       // Defensive: capped at 'fine' whatever the speed gap.
@@ -782,6 +925,9 @@ function gradeRaw(options, chosenTile, threatened) {
       verdict = 'best';
       cost = null;
     }
+    // The AC1 Fine cost already says which safer tile to prefer, and its verdict is not a
+    // "justified"/"no safer tile" situation: no safety note on those steps.
+    if (ac1Cost) safetyNote = null;
   }
   const gapSize = verdict === 'inaccuracy' && cost === speedCost && chosen.shanten === top.shanten
     ? gapSizeOf(top.acceptance, chosen.acceptance) : null;
@@ -814,6 +960,10 @@ function gradeClaim(step, dec, counts) {
     return { action, shantenIfTaken: o.shanten, acceptanceIfTaken: o.acceptance };
   });
   const passed = acceptance(hand, melds.length, before, counts);
+  // AE1: a Pong of the claimed tile uses the hand's only pair, 1 from ready, and would leave mostly single-tile waits.
+  const pongOffer = offers.find((o) => o.action.type === 'pong');
+  const pongCostsOnlyPairWaits = before === 1 && Boolean(pongOffer) && pongOffer.shantenIfTaken === 1 &&
+    onlyRealPairOf(hand, melds.length) === dec.claimTile && pongCostsPairWaits(hand, melds.length, dec.claimTile, counts);
   const chosen = step.chosen;
   const huOffered = offers.some((o) => o.action.type === 'hu');
   const lowering = offers.filter((o) => o.shantenIfTaken < before);
@@ -839,15 +989,8 @@ function gradeClaim(step, dec, counts) {
       loss = { shanten: steps, acceptance: 0 };
     } else {
       // Same distance either way: a Chi or Pong that would clearly have added useful tiles.
-      const richer = offers
-        .filter((o) => (o.action.type === 'chi' || o.action.type === 'pong') && o.shantenIfTaken === before &&
-          o.acceptanceIfTaken - passed.acceptance > fineGap(o.acceptanceIfTaken))
-        .sort((a, b) => b.acceptanceIfTaken - a.acceptanceIfTaken)[0];
-      if (richer) {
-        verdict = 'fine';
-        cost = fineClaimCost(false, richer.acceptanceIfTaken, passed.acceptance);
-        loss = { shanten: 0, acceptance: richer.acceptanceIfTaken - passed.acceptance };
-      }
+      const richer = richerPassOf(offers, before, passed.acceptance, step.threatened, pongCostsOnlyPairWaits);
+      if (richer) ({ verdict, cost, loss } = richer);
     }
   } else if (chosen.type !== 'hu') {
     const mine = offers.find((o) => sameAction(o.action, chosen));
@@ -882,16 +1025,17 @@ function gradeClaim(step, dec, counts) {
     offers.some((o) => o !== mine && ['chi', 'pong'].includes(o.action.type) &&
       o.shantenIfTaken === mine.shantenIfTaken && o.acceptanceIfTaken === mine.acceptanceIfTaken);
   Object.assign(step, {
-    offers, shantenIfPassed: before, acceptanceIfPassed: passed.acceptance, verdict, speedVerdict: verdict, safetyVerdict: null,
+    offers, shantenIfPassed: before, acceptanceIfPassed: passed.acceptance, pongCostsOnlyPairWaits, verdict, speedVerdict: verdict, safetyVerdict: null,
     cost, missedWin, loss, tiedBest,
     note: meldNote ? `Your hand now shows ${sets(step.meldsAfter.length)}` : null,
   });
 }
 
 /**
- * gradeClaimChoice({ offers, shantenIfPassed, acceptanceIfPassed }, action) -> { verdict, cost }:
+ * gradeClaimChoice({ offers, shantenIfPassed, acceptanceIfPassed, threatened, pongCostsOnlyPairWaits }, action) -> { verdict, cost }:
  * the verdict gradeClaim gives a claim-step choice, from the step's offers alone (the same rules;
- * checked against it in the tests). Used by lessons.js and quiz.js.
+ * checked against it in the tests; `threatened` and `pongCostsOnlyPairWaits` are the step's, false when missing).
+ * Used by lessons.js and quiz.js.
  */
 export function gradeClaimChoice(g, action) {
   const before = g.shantenIfPassed;
@@ -912,12 +1056,8 @@ export function gradeClaimChoice(g, action) {
         'staying concealed can be a fair choice, so this is only an inaccuracy';
       return { verdict: 'inaccuracy', cost };
     }
-    const richer = offers
-      .filter((o) => (o.action.type === 'chi' || o.action.type === 'pong') && o.shantenIfTaken === before &&
-        o.acceptanceIfTaken - passed > fineGap(o.acceptanceIfTaken))
-      .sort((a, b) => b.acceptanceIfTaken - a.acceptanceIfTaken)[0];
-    if (richer) return { verdict: 'fine', cost: fineClaimCost(false, richer.acceptanceIfTaken, passed) };
-    return { verdict: 'best', cost: null };
+    const richer = richerPassOf(offers, before, passed, g.threatened, g.pongCostsOnlyPairWaits);
+    return richer ? { verdict: richer.verdict, cost: richer.cost } : { verdict: 'best', cost: null };
   }
   const mine = offers.find((o) => same(o.action, action));
   if (!mine) return { verdict: null, cost: null };
@@ -992,6 +1132,11 @@ function dangerOf(table, tile) {
 // --- wait shape (human-visible: player 0's own hand) ---
 
 const the = (code) => `the ${tileLabel(code)}`;
+// AB1: a plural tile name, for the pair a throw broke: "5s of Characters", "East winds", "Red dragons".
+const tilesLabel = (code) => {
+  const label = tileLabel(code);
+  return isSuit(code) ? `${rankOf(code)}s of ${label.replace(/^\d+ of /, '')}` : `${label}s`;
+};
 const orList = (codes) => (codes.length <= 1 ? codes.map(the).join('')
   : `${codes.slice(0, -1).map(the).join(', ')} or ${the(codes.at(-1))}`);
 

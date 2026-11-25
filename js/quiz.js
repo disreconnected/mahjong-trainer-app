@@ -133,6 +133,8 @@ export function buildQuizItems(games) {
           offers: JSON.parse(JSON.stringify(step.offers)),
           shantenIfPassed: step.shantenIfPassed,
           acceptanceIfPassed: step.acceptanceIfPassed,
+          threatened: Boolean(step.threatened),
+          pongCostsOnlyPairWaits: Boolean(step.pongCostsOnlyPairWaits),
         };
         const actions = [...step.offers.map((o) => o.action), { type: 'pass', player: 0 }];
         const choices = actions.map((a) => ({ id: choiceIdOf(a), label: claimLabel(a), action: a }));

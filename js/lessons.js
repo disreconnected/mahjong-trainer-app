@@ -3,7 +3,7 @@
 import { isSuit, rankOf, suitOf } from './tiles.js';
 import { SAFETY } from './safety.js';
 import {
-  gradeDiscardChoice, gradeClaimChoice, addsSomethingNew, isSpare, isConnected, inSet, realPairs, slipReasonOf,
+  gradeDiscardChoice, gradeClaimChoice, addsSomethingNew, isSpare, isConnected, inSet, realPairs, onlyRealPairOf, slipReasonOf,
 } from './review.js';
 
 export { isConnected };
@@ -48,7 +48,7 @@ export const LESSONS = Object.freeze([
     'A Chi or Pong makes a face-up set, but it also uses tiles from your hand. ' +
       'If those tiles were already part of a set, the claim swaps one set for another and gains nothing.',
     'You took a claim that did not bring you closer or add useful tiles.'),
-  lesson('take-helpful-claims', 'Take claims that bring you closer', 'Helpful claims',
+  lesson('take-helpful-claims', 'Take claims that help your hand', 'Helpful claims',
     'When a Chi or Pong brings you closer, or clearly adds useful tiles, take it.',
     'A claim gives you a set without waiting for a draw. ' +
       'When it brings you closer to ready, or gives you many more useful tiles, it is usually the faster way to win.',
@@ -110,16 +110,13 @@ export function isNearGroup(hand, tile) {
 
 /**
  * The hand's only pair: the code held exactly twice when exactly one code is; else null.
- * With meldCount, only real pairs count (review.js realPairs: some best arrangement uses them).
+ * With meldCount, only real pairs count (review.js onlyRealPairOf: some best arrangement uses them).
  */
 export function onlyPair(hand, meldCount = null) {
+  if (meldCount !== null) return onlyRealPairOf(hand, meldCount);
   const counts = new Map();
   for (const t of hand) counts.set(t, (counts.get(t) || 0) + 1);
-  let pairs = [...counts].filter(([, n]) => n === 2).map(([c]) => c);
-  if (meldCount !== null) {
-    const real = new Set(realPairs(hand, meldCount));
-    pairs = pairs.filter((c) => real.has(c));
-  }
+  const pairs = [...counts].filter(([, n]) => n === 2).map(([c]) => c);
   return pairs.length === 1 ? pairs[0] : null;
 }
 
@@ -229,8 +226,11 @@ function discardRules(step, add) {
   // The secondary label is the lesson named by the cost reason, when the primary is another one.
   const reason = step.costReason
     ? slipReasonOf(step.options, step.table.players[0].hand, step.table.players[0].melds?.length ?? 0, step.chosen.tile) : null;
+  // AB1: the only-pair reason takes the place of the spare-tile reason on those steps, so the
+  // second label keeps naming the spare tile (else the order's next slip), never the pair twice.
+  const named = reason?.lesson === 'keep-a-pair' ? (ordered.includes('spare-tile') ? 'spare-tile' : null) : reason?.lesson;
   const kept = ordered.slice(0, 1);
-  if (reason && ordered.includes(reason.lesson) && !kept.includes(reason.lesson)) kept.push(reason.lesson);
+  if (named && ordered.includes(named) && !kept.includes(named)) kept.push(named);
   else if (ordered.length > 1) kept.push(ordered[1]);
   for (const [id, f] of Object.entries(facts)) {
     const slip = kept.includes(id);
@@ -242,7 +242,10 @@ function discardRules(step, add) {
 function claimRules(step, add) {
   const chosen = step.chosen;
   const takes = chosen.type === 'chi' || chosen.type === 'pong';
-  const g = { offers: step.offers, shantenIfPassed: step.shantenIfPassed, acceptanceIfPassed: step.acceptanceIfPassed };
+  const g = {
+    offers: step.offers, shantenIfPassed: step.shantenIfPassed, acceptanceIfPassed: step.acceptanceIfPassed,
+    threatened: step.threatened, pongCostsOnlyPairWaits: step.pongCostsOnlyPairWaits,
+  };
   const offers = step.offers.filter((o) => o.action.type === 'chi' || o.action.type === 'pong');
   const poorTake = (o) => gradeClaimChoice(g, o.action).verdict === 'inaccuracy';
   const slips = [];
@@ -264,7 +267,9 @@ function claimRules(step, add) {
     if (slip) slips.push('claim-for-a-new-set');
     add('claim-for-a-new-set', chance, slip, chance && !slip);
   }
-  // take-helpful-claims: passing would be graded inaccuracy.
+  // take-helpful-claims: passing would be graded inaccuracy (a claim that lowers the distance, or, AD1,
+  // one that adds a large share of useful tiles at the same distance while player 0 is not threatened,
+  // unless the only such offer is a Pong of the hand's only pair, AE1).
   {
     const chance = gradeClaimChoice(g, { type: 'pass' }).verdict === 'inaccuracy';
     const slip = chance && chosen.type === 'pass';

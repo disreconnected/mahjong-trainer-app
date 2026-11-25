@@ -52,7 +52,7 @@ export function focusCard(focus, gameCount) {
 
 /**
  * The slim line shown during play: { key, text: 'Focus: Keep one pair', tip } or null (no games
- * yet). Two items: 'Focus: Keep one pair · Take claims that bring you closer'.
+ * yet). Two items: 'Focus: Keep one pair · Take claims that help your hand'.
  */
 export function focusLine(focus, gameCount) {
   if (!gameCount || !focus || !focus.length) return null;
