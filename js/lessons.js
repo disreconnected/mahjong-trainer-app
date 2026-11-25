@@ -3,7 +3,7 @@
 import { isSuit, rankOf, suitOf } from './tiles.js';
 import { SAFETY } from './safety.js';
 import {
-  gradeDiscardChoice, gradeClaimChoice, addsSomethingNew, isSpare, isConnected, inSet, realPairs, onlyRealPairOf, slipReasonOf,
+  gradeDiscardChoice, gradeClaimChoice, addsSomethingNew, isSpare, isConnected, inSet, realPairs, onlyRealPairOf, isMadeTriplet, slipReasonOf,
 } from './review.js';
 
 export { isConnected };
@@ -38,6 +38,12 @@ export const LESSONS = Object.freeze([
     'A pair can become a set with one more copy, or be the pair a winning hand needs. ' +
       'Breaking one gives that up. A single tile whose useful draws already help your other tiles costs you nothing to throw.',
     'You broke a pair while a single tile was there to throw.'),
+  lesson('keep-your-sets', 'Keep the sets you have made', 'Keep sets',
+    'Before you throw a tile, check that it is not part of three of a kind you already hold; throw a tile outside your sets first.',
+    'Three of a kind in your hand is already one of the 4 sets a winning hand needs. ' +
+      'Breaking it turns a finished set back into a pair, and the hand then needs one more set from the tiles you have left. ' +
+      'Keeping it lets your other tiles work toward the remaining sets and the pair.',
+    'You broke three of a kind you already held.'),
   lesson('spare-tile', 'Throw the spare tile', 'Spare tiles',
     'When a tile only waits for tiles your other tiles already want, it is spare: throw it first.',
     'Some tiles look useful because they have a neighbour, but every draw they help with already helps your hand. ' +
@@ -124,9 +130,12 @@ const SLOW = new Set(['inaccuracy', 'mistake']);
 
 // Which speed slip is the primary label when several apply: the most specific first. A step
 // keeps at most two labels (a primary and a secondary); other-speed only when none applies.
-// The pair lessons come first: a pair tile also counts as connected, and "you broke your pair"
-// is the more specific reason.
-const SPEED_PRIORITY = ['keep-a-pair', 'keep-your-pairs', 'lone-tile-first', 'spare-tile', 'build-near-your-group', 'widest-wait'];
+// keep-your-sets (AF1) comes first: a tile of three of a kind can also be a spare tile or a wrong
+// widest-wait option, and "you broke a set you had made" is the more specific reason. (A triplet
+// tile is never a wrong option of the pair lessons or of lone-tile-first.) The pair lessons come
+// next: a pair tile also counts as connected, and "you broke your pair" is the more specific
+// reason.
+const SPEED_PRIORITY = ['keep-your-sets', 'keep-a-pair', 'keep-your-pairs', 'lone-tile-first', 'spare-tile', 'build-near-your-group', 'widest-wait'];
 
 // --- per-step rules ---
 
@@ -163,6 +172,13 @@ function discardFacts(step) {
     const lone = (o) => !isConnected(hand, o.tile);
     const wrong = poor.filter((o) => !lone(o) && !inSet(hand, o.tile));
     put('lone-tile-first', wrong, good.some(lone), speedBest.some(lone));
+  }
+
+  // keep-your-sets (AF1): wrong = a tile of a made triplet (held exactly 3 times and used as a set by a best arrangement of the
+  // hand); alternative = a good tile held fewer than 3 times; slip when a speed-best tile is held fewer than 3 times.
+  {
+    const notTriplet = (o) => countIn(hand, o.tile) < 3;
+    put('keep-your-sets', poor.filter((o) => isMadeTriplet(hand, meldCount, o.tile)), good.some(notTriplet), speedBest.some(notTriplet));
   }
 
   // keep-a-pair: wrong = a tile of the only (real) pair.
@@ -214,7 +230,7 @@ function discardFacts(step) {
 
 function discardRules(step, add) {
   const facts = discardFacts(step);
-  // The speed slips, most specific first. keep-your-pairs and spare-tile use the same helpers as
+  // The speed slips, most specific first. keep-your-sets, keep-your-pairs and spare-tile use the same helpers as
   // review.js's costReason, so a cost reason always names one of the step's slips.
   let speed = SPEED_PRIORITY.filter((id) => facts[id].slip);
   if (!speed.length && facts['other-speed'].slip) speed = ['other-speed'];

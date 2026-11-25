@@ -8,7 +8,7 @@ import { tileLabel } from './tileart.js';
 import { discardRisk, threats, riskIndex, RISK_LEVELS } from './safety.js';
 
 /** Version of the analysis itself (not of the log): bump when grading changes. */
-export const REVIEW_VERSION = 14;
+export const REVIEW_VERSION = 15;
 
 /**
  * Grading thresholds, in one place (tuning pass, from the study in docs/review-tuning.md).
@@ -604,6 +604,16 @@ export function realPairs(hand, meldCount) {
 }
 
 /**
+ * isMadeTriplet(hand, meldCount, tile) -> true when the hand holds `tile` exactly 3 times (not 4)
+ * and some best arrangement of the hand uses them as a set of three: taking the three out and
+ * counting them as a meld leaves the hand no further from ready. Three tiles that read better
+ * as parts of runs (7 7 7 beside 5 6 and 8 9, say) are not a made set. (AF1; realPairs' test.)
+ */
+export function isMadeTriplet(hand, meldCount, tile) {
+  return countIn(hand, tile) === 3 && shanten(without(hand, [tile, tile, tile]), meldCount + 1) === shanten(hand, meldCount);
+}
+
+/**
  * addsSomethingNew(options, tile) -> true when keeping `tile` makes some draw useful that would
  * not be otherwise: throwing it costs distance, or another throw at the best distance (one that
  * keeps the tile) is helped by a draw (with copies left) that does not help once the tile is
@@ -650,6 +660,11 @@ export function isSpare(options, hand, tile) {
 /**
  * slipReasonOf(options, hand, meldCount, chosenTile) -> { lesson, tile, words } or null: why a
  * throw slower than the best was slow, in plain words.
+ * 'keep-your-sets' (AF1): the throw broke a concealed triplet that a best arrangement of the hand
+ * uses as a set (isMadeTriplet: held exactly 3 times, not 4) while a best throw was held fewer than
+ * 3 times. That throw (`tile`) is the one at the lowest risk level among the speed-best tiles
+ * held fewer than 3 times, then one held once before one held twice, then the options order.
+ * Runs are not covered: a run tile can belong to several arrangements of the hand.
  * 'keep-a-pair' (AB1): the hand had exactly one real pair, thrown here, while a best throw (`tile`)
  * was held once.
  * 'keep-your-pairs': it broke one of 2+ real pairs while a best throw (`tile`) was not a pair.
@@ -659,6 +674,23 @@ export function slipReasonOf(options, hand, meldCount, chosenTile) {
   const top = options[0];
   const speedBest = options.filter((o) => o.shanten === top.shanten && o.acceptance === top.acceptance);
   if (speedBest.some((o) => o.tile === chosenTile)) return null;
+  if (isMadeTriplet(hand, meldCount, chosenTile)) {
+    const rank = (o) => (o.risk ? riskIndex(o.risk.level) : 0);
+    let alt = null;
+    for (const o of speedBest) {
+      if (countIn(hand, o.tile) >= 3) continue;
+      if (!alt || rank(o) < rank(alt) || (rank(o) === rank(alt) && countIn(hand, o.tile) < countIn(hand, alt.tile))) alt = o;
+    }
+    if (alt) {
+      return {
+        lesson: 'keep-your-sets',
+        tile: alt.tile,
+        words: isSpare(options, hand, alt.tile)
+          ? `you broke a set you had already made (the three ${tilesLabel(chosenTile)}) while ${the(alt.tile)} was spare`
+          : `you broke a set you had already made (the three ${tilesLabel(chosenTile)}) instead of throwing ${the(alt.tile)}`,
+      };
+    }
+  }
   const pairs = realPairs(hand, meldCount).filter((c) => countIn(hand, c) === 2);
   if (pairs.length === 1 && pairs.includes(chosenTile)) {
     const alt = speedBest.find((o) => countIn(hand, o.tile) === 1);
