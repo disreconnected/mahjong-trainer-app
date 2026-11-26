@@ -198,8 +198,11 @@ const sameAction = (a, b) =>
 
 // --- API ---
 
-export function createGame({ seed, dealer }) {
-  const wall = buildWall(seed);
+// `wall` (optional): a prepared wall to deal from instead of buildWall(seed), e.g. the seed's wall under a
+// tile relabelling (disguise.js, via review.js). The rules use only the suit and rank structure of the tiles
+// (runs, triplets, pairs), which such a relabelling preserves.
+export function createGame({ seed, dealer, wall: prepared }) {
+  const wall = prepared ? [...prepared] : buildWall(seed);
   const state = {
     seed, dealer,
     initialWall: [...wall],

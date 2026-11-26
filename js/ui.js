@@ -13,7 +13,7 @@ import { nextAnnouncement } from './announce.js';
 import { buildExport, shareOrDownload, packRecords } from './exportlogs.js';
 import { pickStore, deviceNameOf, suggestDeviceName } from './store.js';
 import {
-  decomposeWin, resultHeadline, resultSubline, winTickerLine, visibleTo, handStatus, statsLine, logStatusText, gameInfoText,
+  decomposeWin, resultHeadline, resultSubline, overruledLine, winTickerLine, visibleTo, handStatus, statsLine, logStatusText, gameInfoText,
 } from './endscreen.js';
 
 const NAMES = ['You', 'Bot 1', 'Bot 2', 'Bot 3'];
@@ -718,6 +718,7 @@ function endScreenHtml(c, numbers) {
   if (!c.isOver || ui.endView !== 'shown') return '';
   const r = c.state.result;
   const sub = resultSubline(r);
+  const overruled = overruledLine(r, c.log().decisions.at(-1));
   const youWon = r.type === 'win' && r.winner === 0;
   const stats = statsLine({
     wallLeft: c.state.wall.length, yourDiscards: ui.yourDiscards, gameNumber: ui.opts.gameNumber ?? 1, tally: ui.opts.tally,
@@ -733,6 +734,7 @@ function endScreenHtml(c, numbers) {
     '<div class="panel panel--end" role="dialog" aria-modal="true" aria-label="Game result">' +
     `<div class="end-head"><h2 class="end-title${youWon ? ' is-you' : ''}">${esc(resultHeadline(r))}</h2>` +
     (sub ? `<p class="end-how">${esc(sub)}</p>` : '') +
+    (overruled ? `<p class="end-how end-overruled">${esc(overruled)}</p>` : '') +
     '</div>' +
     `<div class="end-rows">${[0, 1, 2, 3].map((p) => endRowHtml(c, p, numbers)).join('')}</div>` +
     (ui.opts.endExtra?.(c, save) ?? '') +

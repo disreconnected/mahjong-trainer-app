@@ -8,6 +8,7 @@ import { buildProgress, chooseFocus, focusReport, positives } from './progress.j
 import {
   buildQuizItems, gradeAnswer, emptyQuizState, nextItems, recordAnswer, quizStats, pruneState,
 } from './quiz.js';
+import { disguiseWithRetry, DISGUISE_NOTE } from './disguise.js';
 import { face, back, meldHtml, hideTip } from './ui.js';
 import { escapeHtml as esc, sortNewestFirst, verdictStyle, gameNumberOf } from './reviewview.js';
 import { NAMES, WIND_NAMES } from './endscreen.js';
@@ -758,7 +759,10 @@ function drawCharts() {
 const pr = {
   file: null, // only this game's questions (end screen), else all
   pool: [],
-  items: [],
+  items: [], // the round's questions; each is replaced by its disguised version when it is prepared (a repeat)
+  round: 0, // counts rounds, so a late preparation for an earlier one is dropped
+  prep: {}, // index -> the promise preparing that question
+  ready: new Set(), // indexes of the questions ready to show
   index: 0,
   answers: [], // [{ id, correct }]
   answer: null, // { choice, grade } for the current question
@@ -776,7 +780,7 @@ export function openPractice(opts = {}) {
     renderPractice();
     return;
   }
-  Object.assign(pr, { file: opts.file ?? null, pool: [], items: [], index: 0, answers: [], answer: null, selected: null, saveError: false, summary: false });
+  Object.assign(pr, { file: opts.file ?? null, pool: [], items: [], round: pr.round + 1, prep: {}, ready: new Set(), index: 0, answers: [], answer: null, selected: null, saveError: false, summary: false });
   pr.waiting = true;
   renderPractice();
   refreshLearning();
@@ -792,8 +796,76 @@ function startRound() {
   pr.waiting = false;
   pr.pool = practicePool();
   pr.items = nextItems(pr.pool, store.quizState ?? emptyQuizState(), Date.now(), 10);
-  Object.assign(pr, { index: 0, answers: [], answer: null, selected: null, summary: false });
+  Object.assign(pr, { round: pr.round + 1, prep: {}, ready: new Set(), index: 0, answers: [], answer: null, selected: null, summary: false });
+  showQuestion();
+}
+
+// --- disguised repeats (disguise.js) ---
+// A question seen before is asked as the same position with every tile relabelled, so the player has to
+// solve it again instead of remembering the hand. Its game is analysed again under the disguise (the real
+// grading, tens of ms on a PC; a few more disguises are tried if the first does not pose the same
+// decision) only when the question is about to be shown: the next one is prepared while the current one
+// is answered. The first showing is as played, and the schedule stays keyed to the original item (the
+// disguised item keeps its id).
+
+const LOGS_KEPT = 8;
+const logsByFile = new Map(); // file -> its log, fetched for a disguise (the least recently used are dropped)
+const shownItems = new Map(); // `${item.id}:${seen}` -> the item as shown: disguised, or as played if no disguise fits
+
+async function logOf(file) {
+  let log = logsByFile.get(file);
+  if (log) logsByFile.delete(file);
+  else log = await fetchJson(`/api/logs/${encodeURIComponent(file)}`);
+  logsByFile.set(file, log);
+  if (logsByFile.size > LOGS_KEPT) logsByFile.delete(logsByFile.keys().next().value);
+  return log;
+}
+
+async function disguisedItem(item, seen) {
+  const key = `${item.id}:${seen}`;
+  if (shownItems.has(key)) return shownItems.get(key);
+  const log = await logOf(item.file);
+  await new Promise((r) => setTimeout(r, 0)); // let the page paint first
+  const shown = disguiseWithRetry(item, log, seen).item ?? item; // no disguise fits: as played
+  shownItems.set(key, shown);
+  return shown;
+}
+
+// Makes question i ready to show. Returns null when it is ready now, else the promise preparing it.
+function prepare(i) {
+  const item = pr.items[i];
+  if (!item || pr.ready.has(i)) return null;
+  const seen = store.quizState?.items?.[item.id]?.seen ?? 0;
+  if (!seen) {
+    pr.ready.add(i);
+    return null;
+  }
+  const round = pr.round;
+  pr.prep[i] ??= disguisedItem(item, seen).catch(() => item).then((shown) => {
+    if (pr.round !== round) return;
+    pr.items[i] = shown;
+    pr.ready.add(i);
+  });
+  return pr.prep[i];
+}
+
+const currentItem = () => (pr.ready.has(pr.index) ? pr.items[pr.index] : null);
+
+// Shows the question at pr.index once it is ready, and prepares the one after it.
+function showQuestion() {
+  const round = pr.round;
+  const i = pr.index;
+  const wait = prepare(i);
   renderPractice();
+  const after = () => { if (pr.round === round) prepare(i + 1); };
+  if (!wait) {
+    after();
+    return;
+  }
+  wait.then(() => {
+    if (pr.round === round && pr.index === i) renderPractice();
+    after();
+  });
 }
 
 function renderPractice() {
@@ -813,7 +885,7 @@ function renderPractice() {
   else {
     const q = V.questionProgress(pr.index, pr.items.length);
     sub = `${esc(q.text)}<span class="lf-bar-track" aria-hidden="true"><span class="lf-bar-fill" style="width:${Math.round(q.fill * 100)}%"></span></span>`;
-    body = questionHtml(pr.items[pr.index]);
+    body = pr.ready.has(pr.index) ? questionHtml(pr.items[pr.index]) : messageHtml('<p>Getting the question ready…</p>');
   }
   const notice = pr.saveError ? '<p class="lf-notice" role="alert">Progress not saved: the server could not be reached. Your answers count on this page only.</p>' : '';
   root.innerHTML = `<div class="rv-screen rv-list lf-screen lf-practice">${headerHtml('practice', pr.file ? `Practice: ${V.gameTitle(pr.file)}` : 'Practice', sub)}${notice}${body}</div>`;
@@ -967,8 +1039,9 @@ function questionHtml(item) {
     '<div class="rv-main lf-q-main">' +
     qTableHtml(item) +
     '<aside class="rv-panel lf-q-panel" aria-label="Question">' +
-    `<div class="rv-step-kicker">From ${esc(V.stepLinkText(item.file, item.stepIndex))}</div>` +
+    `<div class="rv-step-kicker">From ${item.disguised && !pr.answer ? 'a past game' : esc(V.stepLinkText(item.file, item.stepIndex))}</div>` +
     `<h2 class="rv-step-title">${esc(item.prompt)}</h2>` +
+    (item.disguised ? `<p class="lf-dim lf-small lf-disguise">${esc(DISGUISE_NOTE)}</p>` : '') +
     controls +
     '</aside></div>'
   );
@@ -993,7 +1066,7 @@ function summaryHtml() {
 let saveChain = Promise.resolve();
 
 function answer(choice) {
-  const item = pr.items[pr.index];
+  const item = currentItem();
   if (!item || pr.answer) return;
   const grade = gradeAnswer(item, choice);
   if (grade.verdict === null) return;
@@ -1028,11 +1101,12 @@ function nextQuestion() {
   pr.selected = null;
   if (pr.index < pr.items.length - 1) pr.index += 1;
   else pr.summary = true;
-  renderPractice();
+  if (pr.summary) renderPractice();
+  else showQuestion();
 }
 
 function pickTile(i) {
-  const item = pr.items[pr.index];
+  const item = currentItem();
   if (!item || pr.answer || item.kind !== 'discard') return;
   if (pr.selected === i) answer(item.table.hand[i]);
   else {
@@ -1100,7 +1174,7 @@ function onClick(ev) {
       break;
     case 'q-choice': answer(el.dataset.choice); break;
     case 'q-throw':
-      if (pr.selected !== null) answer(pr.items[pr.index].table.hand[pr.selected]);
+      if (pr.selected !== null) answer(currentItem()?.table.hand[pr.selected]);
       break;
     case 'q-next': nextQuestion(); break;
     case 'q-again': startRound(); break;
@@ -1116,7 +1190,7 @@ function onClick(ev) {
 function onDblClick(ev) {
   const q = ev.target.closest && ev.target.closest('[data-qi]');
   if (!q || !lf.open || lf.screen !== 'practice' || pr.answer) return;
-  const item = pr.items[pr.index];
+  const item = currentItem();
   if (item && item.kind === 'discard') answer(item.table.hand[Number(q.dataset.qi)]);
 }
 
@@ -1150,7 +1224,7 @@ function onKey(ev) {
     return;
   }
   if (lf.screen !== 'practice' || pr.summary || !pr.items.length) return;
-  const item = pr.items[pr.index];
+  const item = currentItem();
   if (!item) return;
   if (pr.answer) {
     if (ev.key === 'Enter' && !(t && t.tagName === 'BUTTON')) {

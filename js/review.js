@@ -266,15 +266,47 @@ function tableSnapshot(state, lastDiscard) {
   };
 }
 
-// Replays the log. Calls back with the raw material for every player-0 decision.
-function replay(log) {
+// The log as it would read with every tile relabelled by f (code -> code), for a disguised replay. Only what
+// replay() and the grading read is mapped: the wall, the events, the chosen actions, the result and the final
+// hands. Arrays the engine keeps sorted (chi/pong melds, a chi's two tiles, hands) are sorted again, since
+// the relabelling changes the order; the deal's tiles are in wall order and stay so.
+function mapLogTiles(log, f) {
+  if (!log || typeof log !== 'object') return log;
+  const mapTiles = (tiles) => tiles.map(f);
+  const mapEvent = (e) => {
+    if (!e || typeof e !== 'object') return e;
+    const out = { ...e };
+    if (typeof e.tile === 'string') out.tile = f(e.tile);
+    if (Array.isArray(e.tiles)) out.tiles = e.type === 'chi' || e.type === 'pong' ? sortTiles(mapTiles(e.tiles)) : mapTiles(e.tiles);
+    return out;
+  };
+  const mapDecision = (d) => {
+    if (!d || typeof d !== 'object' || !d.chosen || typeof d.chosen !== 'object') return d;
+    const chosen = { ...d.chosen };
+    if (typeof chosen.tile === 'string') chosen.tile = f(chosen.tile);
+    if (Array.isArray(chosen.tiles)) chosen.tiles = sortTiles(mapTiles(chosen.tiles));
+    return { ...d, chosen };
+  };
+  const mapped = { ...log };
+  if (Array.isArray(log.wall)) mapped.wall = mapTiles(log.wall);
+  if (Array.isArray(log.events)) mapped.events = log.events.map(mapEvent);
+  if (Array.isArray(log.decisions)) mapped.decisions = log.decisions.map(mapDecision);
+  if (log.result && typeof log.result === 'object' && typeof log.result.tile === 'string') mapped.result = { ...log.result, tile: f(log.result.tile) };
+  if (Array.isArray(log.finalHands)) mapped.finalHands = log.finalHands.map((h) => (Array.isArray(h) ? sortTiles(mapTiles(h)) : h));
+  return mapped;
+}
+
+// Replays the log. Calls back with the raw material for every player-0 decision. `tileMap` (optional): the log
+// has already been relabelled by it (mapLogTiles), so the wall is the seed's wall under the same relabelling.
+function replay(log, tileMap) {
   if (!log || typeof log !== 'object') fail('not a log object');
   if (!Number.isInteger(log.seed) || log.seed < 0) fail('log has no valid seed');
   if (![0, 1, 2, 3].includes(log.dealer)) fail('log has no valid dealer');
   if (!Array.isArray(log.events) || !Array.isArray(log.decisions)) fail('log has no events or decisions');
-  if (log.wall && !deepEqual(buildWall(log.seed), log.wall)) fail('the wall does not match the seed');
+  const wall = tileMap ? buildWall(log.seed).map(tileMap) : buildWall(log.seed);
+  if (log.wall && !deepEqual(wall, log.wall)) fail('the wall does not match the seed');
 
-  const state = createGame({ seed: log.seed, dealer: log.dealer });
+  const state = createGame({ seed: log.seed, dealer: log.dealer, wall });
   const ev = log.events;
   const setup = state.setupEvents.length;
   if (!deepEqual(clone(state.setupEvents), ev.slice(0, setup))) fail('the deal does not match the log');
@@ -1608,18 +1640,22 @@ function summarize(steps, state, durationMs, hiddenReady) {
 }
 
 /**
- * analyzeLog(log) -> review object (see docs/contract.md "review.js"), or { ok: false, error }
+ * analyzeLog(log, { tileMap }?) -> review object (see docs/contract.md "review.js"), or { ok: false, error }
  * when the log is not a replayable game log (corrupt, incompatible, or diverging events).
+ * tileMap (optional, code -> code): the same game with every tile relabelled (a "disguise", disguise.js);
+ * the real replay and grading run on the relabelled tiles, so every sentence names the new tiles.
  */
-export function analyzeLog(log) {
+export function analyzeLog(log, { tileMap } = {}) {
   let replayed;
+  let src = log;
   try {
-    replayed = replay(log);
+    if (tileMap) src = mapLogTiles(log, tileMap);
+    replayed = replay(src, tileMap);
   } catch (err) {
     return { ok: false, error: err instanceof Divergence ? err.message : `replay failed: ${err.message}` };
   }
   const { state, decisions, timeline, turns, hiddenReady } = replayed;
-  const steps = decisions.map((d, i) => buildStep(d, i, log.events, log.settings?.botLevel));
+  const steps = decisions.map((d, i) => buildStep(d, i, src.events, src.settings?.botLevel));
   const result = clone(state.result);
   const started = Date.parse(log.startedAt);
   const ended = Date.parse(log.endedAt);

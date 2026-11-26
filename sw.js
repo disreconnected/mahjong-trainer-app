@@ -1,5 +1,5 @@
 // Mahjong Trainer's service worker (built by tools/build-mobile.js; do not edit).
-const VERSION = '0f1726391519';
+const VERSION = '5d36c9243da4';
 const SCOPE = new URL(self.registration.scope);
 const CACHE_PREFIX = 'mahjong-' + SCOPE.pathname + '-';
 const CACHE = CACHE_PREFIX + VERSION;
@@ -10,6 +10,7 @@ const PRECACHE = [
   './js/bots.js',
   './js/claimhelp.js',
   './js/controller.js',
+  './js/disguise.js',
   './js/endscreen.js',
   './js/exportlogs.js',
   './js/game.js',

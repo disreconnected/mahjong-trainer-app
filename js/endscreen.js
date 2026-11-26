@@ -79,6 +79,21 @@ export function resultSubline(result) {
   return `Won on ${NAMES[from]}'s discard: ${label}`;
 }
 
+// When player 0's own claim on the winning discard lost to the win: "Your Pong was overruled: a
+// win takes priority over Pong." `decision` is the log's last decision ('' when it does not apply).
+// A Hu of player 0 loses only a tie, to the player sooner in turn order after the thrower.
+export function overruledLine(result, decision) {
+  if (!result || result.type !== 'win' || result.winner === 0 || result.kind === 'selfdraw') return '';
+  const d = decision;
+  if (!d || d.kind !== 'claim' || !d.outranked || d.claimTile !== result.tile || d.claimFrom !== result.from) return '';
+  const type = d.chosen && d.chosen.type;
+  if (type === 'hu') {
+    return `Your Hu was overruled: ${NAMES[result.winner]} comes sooner after ${NAMES[result.from]} in turn order, so that win counts.`;
+  }
+  const word = { chi: 'Chi', pong: 'Pong', kong: 'Kong' }[type];
+  return word ? `Your ${word} was overruled: a win takes priority over ${word}.` : '';
+}
+
 // Ticker line for a hu event: "Bot 2 wins on your discard: 7 of Circles".
 export function winTickerLine(e) {
   const who = e.player === 0 ? 'You win' : `${NAMES[e.player]} wins`;
